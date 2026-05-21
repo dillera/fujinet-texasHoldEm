@@ -54,4 +54,5 @@ dkms.conf
 # debug information files
 *.dwo
 
-r2r/*
+# Build cache (downloaded fujinet-lib etc.)
+_cache/
