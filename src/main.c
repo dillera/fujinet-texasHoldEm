@@ -31,7 +31,9 @@
 char serverEndpoint[50] = "http://127.0.0.1:8080/"; // "N: for apple, but not C64"
 //char serverEndpoint[50] = "https://5card.carr-designs.com/";
 
-char query[50] = "?table=dev3";
+// Empty at boot so the table selection screen is always shown; the room list
+// comes from the server's /tables endpoint
+char query[50] = "";
 char playerName[12] = "";
 
 //GameState state;

@@ -136,13 +136,20 @@ void welcomeActionVerifyServerDetails() {
     // Split "server?query" into separate variables
     while(--i) {
       if (tempBuffer[i]=='?') {
-        strcpy(query, tempBuffer+i);
         tempBuffer[i]=0;
         strcpy(serverEndpoint, tempBuffer);
         break;
       }
     }
+
+    // No '?' found: the whole appkey is the server endpoint
+    if (i==0)
+      strcpy(serverEndpoint, tempBuffer);
   }
+
+  // Keep the endpoint from the appkey but always let the player pick a room
+  // from the server's table list at launch (query empty -> selection screen)
+  query[0]=0;
 }
 
 
