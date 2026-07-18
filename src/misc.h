@@ -87,6 +87,7 @@ typedef _Packed struct {
   int8_t activePlayer;
   uint8_t moveTime;
   uint8_t viewing;
+  char community[11];  // Texas Hold'em community cards, e.g. "askh2d" (up to 5)
   uint8_t validMoveCount;
   ValidMove validMoves[5];
   uint8_t playerCount;

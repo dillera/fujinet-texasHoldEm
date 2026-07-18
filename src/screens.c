@@ -87,26 +87,26 @@ void showHelpScreen() {
   // this client were game agnostic.
   resetScreenWithBorder();
   
-  centerText(HOW_TO_PLAY_ROW_START,"HOW TO PLAY 5 CARD STUD");
+  centerText(HOW_TO_PLAY_ROW_START,"HOW TO PLAY TEXAS HOLD'EM");
   y=HOW_TO_PLAY_ROW_START+1;
-  
+
   #ifndef SKIP_FIRST_BUMP
   BUMP_LINE
   #endif
                   //12345678901234567890123456789012
-  y++;centerText(y, "PLAYERS ARE DEALT 5 CARDS OVER");
-  y++;centerText(y, "FOUR ROUNDS.  IN EVERY ROUND, ");
-  y++;centerText(y, "PLAYERS BET, CALL, AND RAISE. ");
+  y++;centerText(y, "YOU GET 2 CARDS. 5 SHARED     ");
+  y++;centerText(y, "CARDS ARE DEALT IN THE MIDDLE.");
+  y++;centerText(y, "BEST 5-CARD HAND WINS THE POT.");
   y+=2;
-  
+
   centerText(y, "MOVES");
-  
+
   BUMP_LINE        //12345678901234567890123456789012
   y++;centerText(y, "FOLD  - QUIT THE HAND        ");BUMP_LINE
   y++;centerText(y, "CHECK - FREE PASS            ");BUMP_LINE
   y++;centerText(y, "BET / - INCREASE BET. OTHERS ");
   y++;centerText(y, "RAISE   MUST CALL TO STAY IN ");BUMP_LINE
-  y++;centerText(y, "CALL  - MATCH THE CURRENT BET");
+  y++;centerText(y, "ALL-IN- BET ALL YOUR CHIPS   ");
 
   CLEAR_BUMP
 
@@ -435,6 +435,7 @@ typedef struct {
   int8_t activePlayer;
   uint8_t moveTime;
   uint8_t viewing;
+  char community[11];
   uint8_t validMoveCount;
   ValidMove validMoves[5];
   uint8_t playerCount;

@@ -27,12 +27,12 @@
 #include "screens.h"
 
 // Store default server endpoint in case lobby did not set app key
-char serverEndpoint[50] = "https://5card.carr-designs.com/";
-//char serverEndpoint[50] = "http://127.0.0.1:8080/"; // "N: for apple, but not C64"
+// Point at a local Texas Hold'em server for development/testing
+char serverEndpoint[50] = "http://127.0.0.1:8080/"; // "N: for apple, but not C64"
+//char serverEndpoint[50] = "https://5card.carr-designs.com/";
 
-char query[50] = "?table=dev7";//&player=ERICAPL2";
-//char playerName[12] = ""; // "eric";
-char playerName[12] = "ericmsx";
+char query[50] = "?table=dev3";
+char playerName[12] = "";
 
 //GameState state;
 ClientState clientState;

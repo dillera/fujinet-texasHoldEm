@@ -36,6 +36,14 @@ extern unsigned char redrawGameScreen;
 #define LEFT_JUSTIFY_PLAYER_PURSE 0
 #endif
 
+// Texas Hold'em community card board position (5 cards, 2 columns each)
+#ifndef COMMUNITY_X
+#define COMMUNITY_X (WIDTH/2-5)
+#endif
+#ifndef COMMUNITY_Y
+#define COMMUNITY_Y 9
+#endif
+
 void progressAnim(unsigned char y) {
   for(i=0;i<3;++i) {
     pause(10);
@@ -74,6 +82,7 @@ void resetStateIfNewGame() {
 
   xOffset=0;
   currentCard=0;
+  cardIndex=0;
   cursorY=246;
   cursorX=128;
   prevPot=0;
@@ -195,97 +204,65 @@ void checkFinalFlip() {
     drawCards(true);
 }
 
+// Texas Hold'em card rendering. Each player has 2 hole cards; up to 5 shared
+// community cards sit in the middle of the table. Masking is server-side:
+// opponents' hands arrive as "????" until the showdown reveals them, and a
+// folded hand is just "??" (drawn as a single face-down card).
 void drawCards(bool finalFlip) {
-  static bool shouldMaskPlayerCard, doNotFlipCards, dummy;
-  cardIndex=xOffset=fullFirst=doNotFlipCards=0;
-  shouldMaskPlayerCard = true;
+  static unsigned char cc;
 
   if (state.round<1)
     return;
 
+  // Hole cards: animate the deal only when they first appear this hand
+  doAnim = !noAnim && !cardIndex && !finalFlip;
+  if (doAnim)
+    disableDoubleBuffer();
 
-  // Check that at least 2 players are still in the final round, otherwise
-  // if everyone folded, the winning player does not need to flip/reveal their hand.
-  if (state.round == 5) {
-    h=0;
-    for (i=0;i<state.playerCount;i++)
-      if (state.players[i].status == 1)
-        ++h;
-
-    if (h<2) {
-      finalFlip = false;
-      shouldMaskPlayerCard = true;
-      doNotFlipCards=true;
-    } else if (!finalFlip) {
-      shouldMaskPlayerCard = false;
-    }
-  }
-
-
-  while (cardIndex <= state.round) {
-    
-    doAnim = state.round<5 && !noAnim && cardIndex >= currentCard;
-    if (doAnim)
-      disableDoubleBuffer();
-
-    //doAnim = !noAnim && cardIndex >= currentCard;
-    if (doAnim)
-      pause(20);
-
-    cardIndex++;
-    j=cardIndex*2-1;
-
+  for (j=0;j<2;j++) {
     for (h=1;h<=state.playerCount;h++) {
       i = h % state.playerCount;
-      if (strlen(state.players[i].hand)>j) {
-        fullFirst = i==0 && (!state.viewing || finalFlip);
-
-        hand = state.players[i].hand+j-1;
-        if (finalFlip && j==1 && i>0)
-            hand=(char *)"??";
-
-        // z88dk C compiler bug can't handle multiple conditions in a ternary, so use dummy variable
-        dummy = doAnim || hand[0]!='?' || state.players[i].status != 1;
-        
-        drawCard(
-          playerX[i]+((!fullFirst)*xOffset+(fullFirst)*(j-1))*playerDir[i],
-          playerY[i],
-          //doAnim || hand[0]!='?' || state.players[i].status != 1 ? FULL_CARD : playerDir[i]>0 ? PARTIAL_LEFT : PARTIAL_RIGHT,
-          dummy ? FULL_CARD : playerDir[i]>0 ? PARTIAL_LEFT : PARTIAL_RIGHT,
-          hand,
-          j==1 && i==0 && (state.round < 5 || shouldMaskPlayerCard));
+      hand = state.players[i].hand;
+      if (strlen(hand)>j*2+1) {
+        drawCard(playerX[i]+(j*2)*playerDir[i], playerY[i], FULL_CARD, hand+j*2, false);
 
         if (doAnim) {
-
           soundDealCard();
-
-          pause(cardIndex == 1 ? 5 : 10);
+          pause(5);
         }
       }
     }
-
-    xOffset++;
-
-    // Apple 2 doesn't render half cards correctly - rather, the offset cards switch colors, so always_render_full_cards is true for now
-    if (always_render_full_cards || xOffset>1 || (state.round==5 && !finalFlip && !doNotFlipCards))
-      xOffset++;
-    
   }
+  cardIndex=1;
 
+  // Community cards: animate each newly revealed street
+  cc = (unsigned char)strlen(state.community)>>1;
+  for (j=0;j<cc;j++) {
+    doAnim = !noAnim && j>=currentCard;
+    if (doAnim) {
+      disableDoubleBuffer();
+      pause(10);
+    }
+
+    drawCard(COMMUNITY_X+j*2, COMMUNITY_Y, FULL_CARD, state.community+j*2, false);
+
+    if (doAnim)
+      soundDealCard();
+  }
+  currentCard=cc;
+
+  // Showdown: flip each surviving opponent's revealed hand with a beat between
   if (finalFlip) {
-
     drawBuffer();
     disableDoubleBuffer();
 
-    for (h=1;h<=state.playerCount;h++) {
-      i = h % state.playerCount;
-
+    for (h=1;h<state.playerCount;h++) {
       // Don't flip a player that doesn't have a visible hand
-      if (state.players[i].status != 1 || state.players[i].hand[0]=='?')
+      if (state.players[h].status != 1 || state.players[h].hand[0]=='?')
         continue;
 
-      for (j=1;j<=9; j+=2) {
-        drawCard(playerX[i]+(j-1)*playerDir[i], playerY[i], FULL_CARD,state.players[i].hand+j-1, false);
+      for (j=0;j<2;j++) {
+        drawCard(playerX[h]+(j*2)*playerDir[h], playerY[h], FULL_CARD, state.players[h].hand+j*2, false);
       }
 
       soundDealCard();
@@ -296,7 +273,6 @@ void drawCards(bool finalFlip) {
 
   drawBuffer();
   enableDoubleBuffer();
-  currentCard = cardIndex;
   noAnim=false;
 }
 

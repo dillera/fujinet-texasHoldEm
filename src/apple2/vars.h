@@ -10,6 +10,10 @@
 
 #define QUERY_SUFFIX "" // No extra params for Apple II
 
+// Texas Hold'em: community cards occupy the table center (rows 9-13),
+// so shift the pot display below the board
+#define POT_Y_MODIFIER 3
+
 /**
  * Platform specific key map for common input
  */

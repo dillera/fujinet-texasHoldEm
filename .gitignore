@@ -56,3 +56,8 @@ dkms.conf
 
 # Build cache (downloaded fujinet-lib etc.)
 _cache/
+
+# Build output
+build/
+r2r/
+obj/
