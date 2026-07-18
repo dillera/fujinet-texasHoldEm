@@ -142,12 +142,17 @@ void applyPrefs() {
 }
 
 void loadPrefs() {
-  
+
   read_appkey(AK_CREATOR_ID, AK_APP_ID, AK_KEY_PREFS, tempBuffer);
 
   if (strlen(tempBuffer)==0) {
     // Default all prefs to 1
     memset(prefs,1,3);
+    // Platforms can set a different default color mode in their vars.h
+    // (pref value is colorMode+1)
+    #ifdef DEFAULT_COLOR_PREF
+    prefs[PREF_COLOR] = DEFAULT_COLOR_PREF;
+    #endif
   } else {
     strncpy(prefs, tempBuffer,3);
   }

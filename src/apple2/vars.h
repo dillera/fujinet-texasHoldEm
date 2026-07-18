@@ -14,6 +14,10 @@
 // so shift the pot display below the board
 #define POT_Y_MODIFIER 3
 
+// Default to color mode on fresh installs so hearts/diamonds render red
+// (pref value is colorMode+1; toggle in-game with ESC -> C)
+#define DEFAULT_COLOR_PREF 2
+
 /**
  * Platform specific key map for common input
  */
