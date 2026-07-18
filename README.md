@@ -27,7 +27,7 @@ AppleCommander `acx` CLI.
 
 ```bash
 make apple2
-# produces r2r/apple2/fcs.po (bootable ProDOS disk)
+# produces r2r/apple2/texas.po (bootable ProDOS disk)
 ```
 
 ## Testing against a local server

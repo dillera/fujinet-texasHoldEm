@@ -288,11 +288,11 @@ void drawBorder() {
 void drawLogo() {
   static unsigned char i;
   i=4;
-  drawText(15,++i, "           ");
-  drawText(15,++i, " FUJI  NET ");
-  drawText(15,++i, "           ");
-  drawText(15,++i, "5 CARD STUD");
-  drawText(15,++i, "           ");
+  drawText(13,++i, "              ");
+  drawText(13,++i, "   FUJI NET   ");
+  drawText(13,++i, "              ");
+  drawText(13,++i, "TEXAS HOLD 'EM");
+  drawText(13,++i, "              ");
 }
 
 

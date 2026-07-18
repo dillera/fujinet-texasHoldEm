@@ -1,4 +1,4 @@
-PRODUCT = fcs
+PRODUCT = texas
 #TODO FIX adam
 #plus4 also works, but needs fujinet-lib
 PLATFORMS = apple2 c64 coco
