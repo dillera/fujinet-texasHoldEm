@@ -6,6 +6,7 @@
 void showInGameMenuScreen();
 void progressAnim(unsigned char y);
 void drawPot();
+void drawStreetLabel();
 void resetStateIfNewGame();
 void drawNamePurse();
 void drawBets();

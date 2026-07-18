@@ -62,6 +62,20 @@ void drawPot() {
   drawText(WIDTH/2-(state.pot>99 ? 1:0),12+POT_Y_MODIFIER, tempBuffer);
 }
 
+// Texas Hold'em street indicator, drawn top-center as the hand progresses.
+// Labels are padded to a fixed width so each one fully overwrites the previous.
+#ifndef STREET_LABEL_Y
+#define STREET_LABEL_Y 1
+#endif
+void drawStreetLabel() {
+  static const char* streetNames[6] = {
+    "        ", "PRE-FLOP", "  FLOP  ", "  TURN  ", " RIVER  ", "SHOWDOWN"
+  };
+  if (state.round > 5 || state.playerCount < 2)
+    return;
+  drawText(WIDTH/2-4, STREET_LABEL_Y, streetNames[state.round]);
+}
+
 void resetStateIfNewGame() {
   if (state.round >= prevRound)
     return;

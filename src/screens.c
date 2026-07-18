@@ -476,6 +476,7 @@ typedef struct {
   resetStateIfNewGame();
 
   drawPot();
+  drawStreetLabel();
 
   if (state.playerCount>1) {
     drawNamePurse();
