@@ -81,6 +81,11 @@ include mekkogx/toplevel-rules.mk
 msdos/disk-post::
 	mcopy -t -i $(DISK) src/msdos/AUTOEXEC.BAT "::AUTOEXEC.BAT"
 
+# Remove BASIC.SYSTEM (inherited from the ProDOS release disk) so ProDOS boots
+# straight into FCS.SYSTEM (the game loader) instead of dropping to BASIC
+apple2/disk-post::
+	$(DISK_TOOL_X) rm -d $(DISK) BASIC.SYSTEM
+
 # CoCo targets:
 #   make coco        → CoCo 1/2 build
 #   make coco3       → CoCo 3 build (40-column hires layout)
