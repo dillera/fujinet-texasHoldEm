@@ -1,4 +1,6 @@
-'' 5 Card Stud Atari Client for #FujiNet
+'' Texas Hold 'Em Atari Client for #FujiNet
+''
+'' Converted from the original 5 Card Stud client
 ''
 '' @author  Eric Carr
 '' @email   eric dot carr at gmail dot com
@@ -52,7 +54,7 @@ endif
 poke 65,0
 
 ' Game state variables (read from server)
-Dim lastResult$, round, pot, activePlayer, prompt$, moveTime, viewing, validMoveCode$(4), validMove$(4)
+Dim lastResult$, round, pot, activePlayer, community$, moveTime, viewing, validMoveCode$(4), validMove$(4)
 dim player_name$(7), player_status(7), player_bet(7), player_move$(7), player_purse(7), player_hand$(7)
 
 ' Player's name
@@ -125,7 +127,9 @@ DATA playerXMaster() = 17,1, 1, 1, 15, 37,37, 37
 DATA playerYMaster() = 20, 19, 11, 3, 2,3,11,19
 DATA playerDirMaster() = 1,1,1,1,1,-1,-1,-1
 
-DATA playerBetXMaster() = 1,10,10,10,3,-9,-9,-9
+' Mid-row seats (index 2 and 6) sit next to the community board,
+' so their bet/move text is anchored close to their own cards
+DATA playerBetXMaster() = 1,10,7,10,3,-9,-6,-9
 DATA playerBetYMaster() = -3, -2, 1,4,5,4,1,-2
 
 ' Simple hard coded arrangment of players around the table based on player count.
@@ -524,7 +528,7 @@ PROC UpdateState
     elif key$="r" : round = val(value$)
     elif key$="p" : pot = val(value$) 
     elif key$="a" : activePlayer = val(value$)
-    elif key$="p" : prompt$ = value$
+    elif key$="c" : community$ = value$
     elif key$="v" : viewing = val(value$)
     elif key$="m" : 
       moveTime = val(value$)
@@ -689,7 +693,8 @@ PROC WelcomeScreen
   @POS n,5: @Print &"FUJInjpjhNET"
   @POS n,6: @Print &"     lljh"
   @POS n,7: @Print &"      mll"
-  @POS n+4,9:@Print &"5 CARD STUD"
+  ' Note: the custom font has no apostrophe glyph, so no apostrophe in HOLD EM
+  @POS n,9:@Print &"TEXAS HOLD EM"
   @ShowScreen
   pause 1
 
@@ -772,27 +777,29 @@ ENDPROC
 PROC ViewHowToPlay
   ' This COULD retrieve from the server. Hard coded for now.
   @EnableDoubleBuffer
-  @ClearStatusBar:@HidePlayerSecretCardMask':@EnableDoubleBuffer
+  @ClearStatusBar
   @ResetScreen:@DrawBorder
   @DrawBuffer
   y=4
-  @PrintAt 8,3, &"HOW TO PLAY 5 CARD STUD"
+  @PrintAt 7,3, &"HOW TO PLAY TEXAS HOLD EM"
   @DrawBuffer
                       ' __________________________________
-  inc y:@PrintAt 3,y, &"PLAYERS ARE DEALT 5 CARDS OVER THE"
-  inc y:@PrintAt 3,y, &"COURSE OF 4 ROUNDS. ON EACH ROUND"
-  inc y:@PrintAt 3,y, &"PLAYERS BET, CALL, AND RE-RAISE."
+  inc y:@PrintAt 3,y, &"YOU GET 2 HIDDEN CARDS. 5 SHARED"
+  inc y:@PrintAt 3,y, &"CARDS ARE DEALT FACE UP OVER THE"
+  inc y:@PrintAt 3,y, &"COURSE OF 4 BETTING ROUNDS. MAKE"
+  inc y:@PrintAt 3,y, &"YOUR BEST 5 CARD HAND TO WIN."
   @DrawBuffer
   INC Y
   inc y:@PrintAt 18,y, &"MOVES"
   INC Y
-  inc y:@PrintAt 3,y, &"FOLD   x QUIT THE HAND":inc y
-  inc y:@PrintAt 3,y, &"CHECK  x FREE PASS":inc y
+  inc y:@PrintAt 3,y, &"FOLD   x QUIT THE HAND"
+  inc y:@PrintAt 3,y, &"CHECK  x FREE PASS"
   inc y:@PrintAt 3,y, &"BET OR x INCREASE BET. OTHERS MUST"
-  inc y:@PrintAt 3,y, &"RAISE    CALL TO STAY IN THE HAND":inc y
+  inc y:@PrintAt 3,y, &"RAISE    CALL TO STAY IN THE HAND"
   inc y:@PrintAt 3,y, &"CALL   x MATCH THE CURRENT BET AND"
-  inc y:@PrintAt 3,y, &"         STAY IN THE HAND" 
-  
+  inc y:@PrintAt 3,y, &"         STAY IN THE HAND"
+  inc y:@PrintAt 3,y, &"ALL-IN x BET ALL YOUR CHIPS"
+
   @DrawBuffer
   @PrintAt 7,25, &"PRESS ANY KEY TO CONTINUE"
 
@@ -941,7 +948,7 @@ PROC CheckIfSpectatorStatusChanged
        sound 1,255,10,8:pause 2:sound:pause 3
     next i
     pause 80
-  elif player_status(0)=0 or (round=1 and player_status(0)=1 and activePlayer <>0)
+  elif player_status(0)=0 or (round=1 and (player_status(0)=1 or player_status(0)=4) and activePlayer <>0)
     ' Display intro text if player is joining the table on 
     ' the opening round or sitting down to wait for the next round.
     ' Otherwise, they are re-joining due to connection error, so we do not delay
@@ -1031,18 +1038,21 @@ PROC ResetStateIfNewGame
   
   ' If the round is already past 1, we are joining a game in progress. Skip animation this update
   if round>1 then noAnim=1
-
-  @HidePlayerSecretCardMask
 ENDPROC
 
 PROC RenderPot
-  ' Pot border
-  @POS 17,12:@PrintInv &";@@@@<"
-  @POS 17,13:@PrintInv &"?o   ?"
-  @POS 17,14:@PrintInv &"=@@@@>"
+  ' Street name, fixed width, to the left of the pot
+  if round>=1 and round<=5
+    @POS 8,15:@Print &"PRE-FLOPFLOP    TURN    RIVER   SHOWDOWN"[(round-1)*8+1,8]
+  endif
+
+  ' Pot border (below the community card board)
+  @POS 17,14:@PrintInv &";@@@@<"
+  @POS 17,15:@PrintInv &"?o   ?"
+  @POS 17,16:@PrintInv &"=@@@@>"
 
   ' Pot total
-  @POS 20-1*(pot>99),13:@PrintVal pot
+  @POS 20-1*(pot>99),15:@PrintVal pot
 
 ENDPROC
 
@@ -1092,17 +1102,6 @@ PROC RenderGameStatus
     @PrintUpper &player_name$(activePlayer)
 
   elif activePlayer< 0 and (round = 5 or round = 0)
-   ' If everyone but the player folded, don't indicate their card was flipped
-    ii=1
-    if round=5 and player_status(0)=1
-      ii=0
-      for i=1 to playerCount-1
-        if player_status(i)=1 then ii=1
-      next
-    endif
-
-    if ii=1 then @HidePlayerSecretCardMask
-    
 
     ' End of (or in between) games
      if round=5 and prevRound <> round 
@@ -1266,32 +1265,24 @@ PROC RenderNamePurse
   next
 ENDPROC
 
-PROC RenderCards  
+PROC RenderCards
   if round <1 then exit
-  
-  ' Draw next cards with sound/delay as if the dealer is dealing out one by one
-  
-  cardIndex = 0
-  xOffset = 0
-  finalFlip = prevRound<round and round=5
-  
-  while cardIndex <= round
-    doAnim = (round<5 and not noAnim and cardIndex >= currentCard)' or (round=5 and prevRound<round and cardIndex=4)
-    if doAnim 
-      doAnim = 1
-    endif
-    if doAnim then pause 10
-    inc cardIndex
-    j=cardIndex*2-1
-    if doAnim then pause 10
+
+  ' Draw each player's 2 hole cards. Hands are masked server side:
+  ' own hand is visible (e.g. "ASKH"), opponents are "????" until the
+  ' showdown (when surviving hands arrive revealed), and a folded
+  ' player's hand is "??" (a single face down card).
+  ' Deal with sound/delay the first time a hand is rendered.
+
+  doAnim = not noAnim and xOffset=0
+
+  for j=1 to 3 step 2
     for ii=1 to playerCount
       i = ii mod playerCount
-      if len(player_hand$(i))>j 
-        fullFirst = i=0 and (not Viewing or finalFlip)
-        if doAnim then sound 1,0,0,1
+      if len(player_hand$(i))>j
         hand$=player_hand$(i)[j,2]
-        if finalFlip and j=1 and i>0 then hand$="??"
-        @DrawCard &hand$, playerX(i)+((not fullFirst)*xOffset+(fullFirst)*(J-1))*playerDir(i), playerY(i)
+        if doAnim then sound 1,0,0,1
+        @DrawCard &hand$, playerX(i)+(j-1)*playerDir(i), playerY(i)
 
         if doAnim
           @DrawBuffer
@@ -1300,57 +1291,32 @@ PROC RenderCards
           next
           sound
         endif
-    
-        if doAnim and cardIndex >1 then pause 5
       endif
     next
-    inc xOffset
-    if xOffset>1 or (round=5 and not finalFlip) then inc xOffset
-  wend
-  
-  ' Create or hide player's hidden card mask
-  ' End of game reveal or player folded
-  
-  if round=5 or player_status(0) <> 1
-    
-    ' If everyone else folded, don't flip the winner's card
-    ii=1
-    if round=5 and player_status(0)=1
-      ii=0
-      for i=1 to playerCount-1
-        if player_status(i)=1 then ii=1
+  next
+  xOffset=1
+
+  ' Draw the community card board in the center of the table,
+  ' dealing any newly revealed cards one by one
+  j=1
+  while j<len(community$)
+    hand$=community$[j,2]
+    doAnim = not noAnim and j>currentCard
+    if doAnim then pause 5:sound 1,0,0,1
+    @DrawCard &hand$, 14+j, 9
+
+    if doAnim
+      @DrawBuffer
+      for vol=2 to 0 step -1
+        pause :sound 1,0,0,vol
       next
+      sound
+      pause 5
     endif
+    j=j+2
+  wend
 
-    if ii=1 then @HidePlayerSecretCardMask
-  elif currentCard = 0 and round<5 
-    @CreatePlayerSecretCardMask
-  endif
-  
-  ' If round 5, flip all remaining hands
-  if finalFlip
-    @DrawBuffer
-    for i=1 to playerCount-1
-      if player_status(i)=1
-
-        ' Reveal full hand on-screen  
-        sound 1,0,0,1:vol=4:xOffset=0
-        x = screen+playerY(i)*40+playerX(i)-1-7*(playerDir(i)<0)
-        for j=0 to 199 step 40:mset x+j,11,0:next
-
-        for j=1 to len(player_hand$(i)) step 2
-          @DrawCard &player_hand$(i)[j,2], playerX(i)+((i>0)*(xOffset)+(i=0)*(J-1))*playerDir(i), playerY(i)
-          inc xOffset:inc xOffset
-          sound 1,0,0,vol: if vol>0 then dec vol
-        next
-        @DrawBuffer
-        sound 
-        pause 40
-      endif
-    next
-  endif
-
-  currentCard = cardIndex
+  currentCard = len(community$)
   noAnim=0
 ENDPROC
 
@@ -1534,57 +1500,12 @@ PROC WaitOnPlayerMove
   
 ENDPROC
 
-Proc HidePlayerSecretCardMask
-  PMHPOS 1,0
-endproc
-
-Proc ShowPlayerSecretCardMask
-  PMHPOS 1,116
-endproc
-
-' ===================================
-' Update "player 1" to be a mask of the player's hidden card, so it can be
-' displayed as darker to indicate it is hidden from other players
-PROC CreatePlayerSecretCardMask
-  
-  ' If viewing a game, there is nothing to mask
-  if viewing then exit
-
-  ' Move the mask offscreen when creating
-  @HidePlayerSecretCardMask
-
-  ' Left characters
-  i = screen+40*playerY(0)+playerX(0)+40
-  for j= 0 to 23
-    if j mod 8 = 0 
-      val = peek(i) mod 128:  src = &charBuffer+val*8: i = i + 40
-    endif
-    v = peek(src+j mod 8)
-    poke pm.1+187+j,  (v&$C0<$C0)*$80 + (v&$30<$30)*$40 + (v&$0C<$0C)*$20 + (v&$03<$03)*$10
-  next
-
-  ' Right characters
-  i = screen+40*playerY(0)+playerX(0)+41
-  for j= 0 to 23
-    if j mod 8 = 0 
-      val = peek(i) mod 128:  src = &charBuffer+val*8: i = i + 40
-    endif
-    v = peek(src+j mod 8)
-    poke pm.1+187+j, peek(pm.1+187+j) + (v&$C0<$C0)*$08 + (v&$30<$30)*$04 + (v&$0C<$0C)*$02
-  next
-
-  poke pm.1+186,$7e:poke pm.1+211,$7e
-
-  @ShowPlayerSecretCardMask
-ENDPROC
-
 proc AskToLeave
   ' Turn on keystroke sound
   POKE 731,0
 
   @ClearStatusBar
-  @HidePlayerSecretCardMask
-  
+
   @EnableDoubleBuffer
   
   x=8:Y=5
@@ -1975,7 +1896,6 @@ do
       if query$=""
         @SelectTable
       else
-        @ShowPlayerSecretCardMask
         @UpdateScreen
       endif
     elif k=72 ' H
