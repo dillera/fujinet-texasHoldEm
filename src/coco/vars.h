@@ -29,7 +29,10 @@
 
 #define SINGLE_BUFFER
 #define HIRES_Y 1
-#define POT_Y_MODIFIER -1
+// Texas Hold'em: community board sits at rows 9-13, pot goes below it
+#define POT_Y_MODIFIER 3
+// Top seats' names occupy row 1, so the street label uses row 0
+#define STREET_LABEL_Y 0
 #define STATUS_TIMER_WIDTH 1
 
 #define QUERY_SUFFIX "&be=1" // Big Endian response for CoCo (68000)

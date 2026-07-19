@@ -97,7 +97,7 @@ coco3:
 	$(MAKE) coco MAKE_COCO3=COCO3
 
 # Combined CoCo 1/2 + CoCo 3 disk. The loader (support/coco/loader.c)
-# auto-detects the model and runs FCS12 or FCS3.
+# auto-detects the model and runs TEXAS12 or TEXAS3.
 R2R_PRODUCT = r2r/coco/$(PRODUCT)
 COCO_DISK   = $(R2R_PRODUCT).dsk
 
@@ -116,6 +116,6 @@ coco-dist:
 	$(RM) $(COCO_DISK)
 	decb dskini $(COCO_DISK)
 	decb copy -t -0 support/coco/autoexec.bas $(COCO_DISK),AUTOEXEC.BAS
-	decb copy -b -2 $(R2R_PRODUCT).bin   $(COCO_DISK),FCS.BIN
-	decb copy -b -2 $(R2R_PRODUCT)12.bin $(COCO_DISK),FCS12.BIN
-	decb copy -b -2 $(R2R_PRODUCT)3.bin  $(COCO_DISK),FCS3.BIN
+	decb copy -b -2 $(R2R_PRODUCT).bin   $(COCO_DISK),TEXAS.BIN
+	decb copy -b -2 $(R2R_PRODUCT)12.bin $(COCO_DISK),TEXAS12.BIN
+	decb copy -b -2 $(R2R_PRODUCT)3.bin  $(COCO_DISK),TEXAS3.BIN

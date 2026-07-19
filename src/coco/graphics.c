@@ -467,11 +467,11 @@ void drawBorder() {
 void drawLogo() {
   static unsigned char i;
   i=4;
-  drawText(WIDTH/2-5,++i, "           ");
-  drawText(WIDTH/2-5,++i, " FUJI  NET ");
-  drawText(WIDTH/2-5,++i, "           ");
-  drawText(WIDTH/2-5,++i, "5 CARD STUD");
-  drawText(WIDTH/2-5,++i, "           ");
+  drawText(WIDTH/2-7,++i, "              ");
+  drawText(WIDTH/2-7,++i, "   FUJI NET   ");
+  drawText(WIDTH/2-7,++i, "              ");
+  drawText(WIDTH/2-7,++i, "TEXAS HOLD 'EM");
+  drawText(WIDTH/2-7,++i, "              ");
 }
 
 

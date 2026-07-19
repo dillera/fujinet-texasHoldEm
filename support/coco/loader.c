@@ -31,7 +31,7 @@ void runm(const char *filename)
     }
 }
 
-#define PROGRAM_TO_RUN "FCS"
+#define PROGRAM_TO_RUN "TEXAS"
 
 // Load appropriate binary depending on CoCo version
 void main(void)
