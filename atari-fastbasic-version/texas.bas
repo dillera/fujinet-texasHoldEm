@@ -44,10 +44,9 @@ if serverEndpoint$<>""
     endif
   next
 else
-  ' Default to a local Texas Hold'em server if not specified by lobby.
-  ' (The old public default was the 5 Card Stud server - wrong game!)
-  serverEndpoint$="http://127.0.0.1:8080/"
-  'serverEndpoint$="https://5card.carr-designs.com/"
+  ' Default to the public Texas Hold'em server if not specified by lobby.
+  serverEndpoint$="https://th.carr-designs.com/"
+  'serverEndpoint$="http://127.0.0.1:8080/"
 endif
 
 ' Silence the loud SIO noise
