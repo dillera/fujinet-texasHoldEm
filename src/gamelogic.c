@@ -196,18 +196,24 @@ void drawBets() {
     } 
 
     #if WIDTH>=40
-    // Draw Move
+    // Draw Move in a fixed 5-character field (padded, right-aligned for
+    // right-side seats) so a shorter move always fully overwrites a longer
+    // previous one - variable-width redraws left stale text fragments
     x= playerX[i]+playerBetX[i];
     y--;
-      
-    if (playerDir[i]<0)
-      x-=(unsigned char)strlen(state.players[i].move);
 
-    if (strlen(state.players[i].move)<5) {
-      drawText(playerDir[i]<0 ? x-1 : x + 4,y, " ");   
+    k=(unsigned char)strlen(state.players[i].move);
+    if (k>5) k=5;
+    memcpy(tempBuffer, "     ", 5);
+    tempBuffer[5]=0;
+    if (playerDir[i]<0) {
+      x-=5;
+      memcpy(tempBuffer+5-k, state.players[i].move, k);
+    } else {
+      memcpy(tempBuffer, state.players[i].move, k);
     }
 
-    drawText(x, y, state.players[i].move);
+    drawText(x, y, tempBuffer);
     #endif
 
   }
