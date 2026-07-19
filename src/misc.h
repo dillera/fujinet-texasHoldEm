@@ -37,11 +37,11 @@
 #define AK_LOBBY_CREATOR_ID 1     // FUJINET Lobby
 #define AK_LOBBY_APP_ID 1         // Lobby Enabled Game
 #define AK_LOBBY_KEY_USERNAME 0   // Lobby Username key
-#define AK_LOBBY_KEY_SERVER 1     // 5 Card Stud Client registered as Lobby appkey 1
+#define AK_LOBBY_KEY_SERVER 8     // Texas Hold'em registered as Lobby appkey 8
 
-// 5 Card Stud client
-#define AK_CREATOR_ID 0xE41C      // Eric Carr//s creator id
-#define AK_APP_ID 1               // 5 Card/Poker App ID
+// Texas Hold'em client (own creator id - do not reuse 5 Card Stud's 0xE41C)
+#define AK_CREATOR_ID 0xBEBE      // Texas Hold'em creator id
+#define AK_APP_ID 0x01            // Texas Hold'em App ID
 #define AK_KEY_PREFS 0            // Preferences
 
 #define PREF_HELP 0  // 1/2 seen help screen no/yes

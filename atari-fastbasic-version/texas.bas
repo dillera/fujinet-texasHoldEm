@@ -10,11 +10,11 @@
 AK_LOBBY_CREATOR_ID = 1     ' FUJINET Lobby
 AK_LOBBY_APP_ID  = 1        ' Lobby Enabled Game
 AK_LOBBY_KEY_USERNAME = 0   ' Lobby Username key
-AK_LOBBY_KEY_SERVER = 1     ' 5 Card Stud Client registered as Lobby appkey 1
+AK_LOBBY_KEY_SERVER = 8     ' Texas Hold'em registered as Lobby appkey 8
 
 ' 5 Card Stud client
-AK_CREATOR_ID = $E41C       ' Eric Carr's creator id
-AK_APP_ID = 1               ' 5 Card/Poker App ID
+AK_CREATOR_ID = $BEBE       ' Texas Hold'em creator id (not 5CS's $E41C)
+AK_APP_ID = 1               ' Texas Hold'em App ID ($01)
 AK_KEY_SHOWHELP = 0         ' Shown help
 AK_KEY_COLORTHEME = 1       ' Color theme
 
