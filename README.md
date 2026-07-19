@@ -30,6 +30,17 @@ make apple2
 # produces r2r/apple2/texas.po (bootable ProDOS disk)
 ```
 
+## Building the MS-DOS client
+
+Requires OpenWatcom v2 (`wcc`/`wasm`/`wlink` on PATH, `WATCOM` and `INCLUDE`
+env vars set) and GNU mtools:
+
+```bash
+export WATCOM=~/code/openwatcom/rel2 INCLUDE=$WATCOM/h PATH=$WATCOM/binl:$PATH
+./make-exp msdos
+# produces r2r/msdos/texas.exe and texas.img (360KB floppy with AUTOEXEC.BAT)
+```
+
 ## Testing against a local server
 
 Start the server:

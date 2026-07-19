@@ -483,6 +483,11 @@ void drawBorder()
 
 void drawLogo()
 {
+  drawText(13,5, "              ");
+  drawText(13,6, "   FUJI NET   ");
+  drawText(13,7, "              ");
+  drawText(13,8, "TEXAS HOLD 'EM");
+  drawText(13,9, "              ");
 }
 
 void initGraphics()

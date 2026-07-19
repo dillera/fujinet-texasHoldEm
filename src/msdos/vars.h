@@ -7,7 +7,11 @@
 
 #define WIDTH 40
 #define HEIGHT 25
-#define QUERY_SUFFIX "" // No extra params for msdos 
+#define QUERY_SUFFIX "" // No extra params for msdos
+
+// Texas Hold'em: community board occupies the table center (rows 9-13),
+// pot and street label sit below it
+#define POT_Y_MODIFIER 3
 
 /**
  * Platform specific key map for common input
