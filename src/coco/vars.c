@@ -12,7 +12,7 @@ unsigned char playerYMaster[] = { 18, 18,10,2, 2, 2,10,18 };
 
 char playerDirMaster[] = { 1,1,1,1,1,-1,-1,-1 };
 char playerBetXMaster[] = { 3,10,1,10,3,-8,-1,-8 };
-char playerBetYMaster[] = { -3, -3, 4,4,4,4,4,-3 };
+char playerBetYMaster[] = { -3, -3, 3,4,4,4,3,-3 };
 
 #else /* CoCo 3*/
 unsigned char playerXMaster[] = { 17,1, 1, 1, 16, 37,37, 37 };

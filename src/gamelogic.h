@@ -10,7 +10,7 @@ void drawStreetLabel();
 void resetStateIfNewGame();
 void drawNamePurse();
 void drawBets();
-#ifdef __WATCOMC__
+#if defined(__WATCOMC__) || defined(HOST_UI_TEST)
 #include <stdbool.h>
 void drawCards(bool finalFlip);
 #else
