@@ -1,7 +1,7 @@
-# fujinet-5cardstud → Texas Hold'em
+# fujinet-texasHoldEm
 
-Multi-platform 8-bit FujiNet poker client, originally @ericcarrgh's 5 Card Stud
-client, migrated on this branch to play **Texas Hold'em** against the
+Multi-platform 8-bit FujiNet Texas Hold'em client, originally @ericcarrgh's
+5 Card Stud client (fujinet-5cardstud), migrated to play against the
 `texasholdem` server in [dillera/servers](https://github.com/dillera/servers)
 (`fujinet-game-system/texasholdem`).
 
