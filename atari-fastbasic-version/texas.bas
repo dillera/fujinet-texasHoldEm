@@ -44,10 +44,10 @@ if serverEndpoint$<>""
     endif
   next
 else
-  ' Default to known server if not specified by lobby. Override for local testing
-  serverEndpoint$="https://5card.carr-designs.com/"
-  'serverEndpoint$="http://192.168.2.41:8080/"
-  'query$="?table=dev7"
+  ' Default to a local Texas Hold'em server if not specified by lobby.
+  ' (The old public default was the 5 Card Stud server - wrong game!)
+  serverEndpoint$="http://127.0.0.1:8080/"
+  'serverEndpoint$="https://5card.carr-designs.com/"
 endif
 
 ' Silence the loud SIO noise
