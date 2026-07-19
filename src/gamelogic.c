@@ -393,6 +393,16 @@ void animateChipsToPotOnRoundEnd() {
   if (state.round <= prevRound || state.pot == 0)
     return;
 
+  // A new street begins: request a full clean redraw of the table after the
+  // chip animation. The incremental bet/move erasing below uses fixed widths
+  // and can leave text fragments (varying-length moves, chip columns) that
+  // used to be harmless but now sit next to the community board.
+  // Not done for the showdown transition (round 5), where the final card
+  // flip must stay on screen on SINGLE_BUFFER platforms. (Double-buffered
+  // platforms fully redraw every frame anyway; this matters for the CoCo.)
+  if (state.round < 5)
+    redrawGameScreen=1;
+
   clearStatusBar();
   pause(50);
 

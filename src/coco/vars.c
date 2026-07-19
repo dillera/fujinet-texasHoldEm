@@ -19,7 +19,7 @@ unsigned char playerXMaster[] = { 17,1, 1, 1, 16, 37,37, 37 };
 unsigned char playerYMaster[] = { 18, 18,10,2, 2, 2,10,18 };
 
 char playerDirMaster[] = { 1,1,1,1,1,-1,-1,-1 };
-char playerBetXMaster[] = { 1,10,8,10,3,-8,-8,-8 };
+char playerBetXMaster[] = { 1,10,8,10,3,-8,-3,-8 };
 char playerBetYMaster[] = { -2, -2, 1,5,5,5,1,-2 };
 
 #endif

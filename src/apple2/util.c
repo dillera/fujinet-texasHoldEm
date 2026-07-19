@@ -13,7 +13,9 @@ unsigned char playerXMaster[] = { 17,1, 1, 1, 15, 37,37, 37 };
 unsigned char playerYMaster[] = { 18, 17, 10, 3, 3,3,10,17 };
 
 char playerDirMaster[] = { 1,1,1,1,1,-1,-1,-1 };
-char playerBetXMaster[] = { 1,10,10,10,3,-8,-8,-8 };
+// Texas Hold'em: mid-row seats (idx 2/6) anchor their bet/move text beside
+// their own cards so nothing overlaps the community board (columns 15-24)
+char playerBetXMaster[] = { 1,10,8,10,3,-8,-3,-8 };
 char playerBetYMaster[] = { -2, -2, 1,4,4,4,1,-2 };
 
 // Simple hard coded arrangment of players around the table based on player count.
