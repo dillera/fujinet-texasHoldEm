@@ -137,20 +137,26 @@ void drawStatusTextAt(unsigned char x, const char* s)
 
 void drawStatusText(const char* s)
 {
-    char* comma;
     clearStatusBar();
 
     // Wrap double line status text at comma
     if (strlen(s)>40)
     {
-        comma = (char *)s;
-        while (*comma++!=',');
-        comma[0]=0;
-        comma++;
+        unsigned char len, i;
+    /* Never cut the source string: that truncated state.lastResult
+       permanently, so later repaints took the single-row path. */
+        len = (unsigned char)strlen(s);
+        for (i=0; i<len && s[i]!=','; i++)
+            tempBuffer[i]=s[i];
+        tempBuffer[i]=0;
 
         mask=96;
-        drawText(0, 184, s);
-        drawText(0, 192, comma);
+        drawText(0, 184, tempBuffer);
+        if (i<len) {
+            while (s[i]==',' || s[i]==' ')
+                i++;
+            drawText(0, 192, s+i);
+        }
         mask=0;
     }
     else
@@ -293,31 +299,9 @@ void drawCard(unsigned char x, unsigned char y, unsigned char partial, const cha
         break;
     }
 
+    /* 5 Card Stud's PARTIAL_LEFT/RIGHT slivers were unreachable here: every
+       Hold'em caller passes FULL_CARD. */
     // Draw top of card
-    if (partial == PARTIAL_LEFT)
-    {
-        plot_tile(&card_edges[0],x,y);
-        plot_tile(&card_bits[6],x,y+1);
-        plot_tile(&card_bits[8],x,y+2);
-        plot_tile(&card_bits[10],x,y+3);
-        plot_tile(&card_edges[1],x,y+4);
-    }
-    else if (partial == PARTIAL_RIGHT)
-    {
-        // // TODO: Double check this.
-        plot_tile(&card_edges[4],x+1,y);
-        plot_tile(&card_bits[1],x+1,y+1);
-        plot_tile(&card_bits[2],x+1,y+2);
-        plot_tile(&card_bits[3],x+1,y+3);
-        plot_tile(&card_edges[5],x+1,y+4);
-
-        plot_tile(&card_edges[8],x+2,y);
-        plot_tile(&card_edges[6],x+2,y+1);
-        plot_tile(&card_edges[6],x+2,y+2);
-        plot_tile(&card_edges[6],x+2,y+3);
-        plot_tile(&card_edges[7],x+2,y+4);
-    }
-    else // FULL_CARD, top.
     {
         plot_tile(&card_edges[0],x,y);
         plot_tile(&card_edges[2],x+1,y);
@@ -531,11 +515,73 @@ void initGraphics()
 
 }
 
+/* Because I don't want to drag all of conio into this project! */
+_WCIRTLINK extern unsigned inp(unsigned __port);
+_WCIRTLINK extern unsigned outp(unsigned __port, unsigned __value);
+
+/* PIT based frame pacing. The retrace poll at 0x3DA is unreliable under QEMU,
+   which toggles the bit on every read, so every pause() built on it returns
+   instantly. Counter 0 is dependable on both. sound.c shares these. */
+unsigned int pitTicksPerMs = 0;
+
+unsigned int pitRead(void)
+{
+    unsigned int t;
+
+    outp(0x43, 0x00);                /* latch counter 0 */
+    t  = (unsigned int)inp(0x40);
+    t |= (unsigned int)inp(0x40) << 8;
+    return t;
+}
+
+/* Counter 0 is crystal driven, so waits off it need no cpu speed scaling. The
+   BIOS mode does vary though: mode 3 drops the count by two per clock, halving
+   every interval. QEMU leaves mode 2, real BIOSes usually mode 3. Measured
+   against the BIOS tick at 0040:006C, which is 18.2Hz whatever the mode. */
+void calibratePit(void)
+{
+    volatile unsigned long far *biosTick;
+    unsigned long units, mark;
+    unsigned int prev, now, perMs;
+
+    biosTick = (volatile unsigned long far *)MK_FP(0x40, 0x6C);
+
+    mark = *biosTick;
+    while (*biosTick == mark)        /* start on a fresh tick */
+        ;
+
+    mark = *biosTick;
+    units = 0;
+    prev = pitRead();
+    while (*biosTick == mark) {
+        now = pitRead();
+        units += (unsigned int)(prev - now);
+        prev = now;
+    }
+
+    perMs = (unsigned int)((units * 1000UL) / 54925UL);
+
+    /* ~1193 in mode 2, ~2386 in mode 3; anything else means it went wrong */
+    pitTicksPerMs = (perMs >= 900 && perMs <= 3000) ? perMs : 1193;
+}
+
+/* Free running: one frame since the last call, not a frame from now -
+   waiting from entry would add the frame to the caller's own work. */
 void waitvsync()
 {
-    // Wait until we are in vsync
-    while (! (inp(0x3DA) & 0x08));
-    while (inp(0x3DA) & 0x08);
+    static unsigned int last_pit = 0;
+    unsigned int now, elapsed, frame;
+
+    if (!pitTicksPerMs)
+        calibratePit();
+
+    frame = (unsigned int)(((unsigned long)pitTicksPerMs * 50UL) / 3UL);  /* 16.67ms */
+
+    do {
+        now = pitRead();
+        elapsed = (unsigned int)(last_pit - now);
+    } while (elapsed < frame);
+    last_pit = now;
 }
 
 uint8_t cycleNextColor()

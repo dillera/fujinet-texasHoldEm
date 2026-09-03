@@ -128,18 +128,34 @@ void drawStatusTextAt(unsigned char x, const char* s) {
 }
 
 void drawStatusText(const char* s) {
-  static char* comma;
-  
-  unsigned char len = strlen(s);
+  static unsigned char len, i, n;
+
+  len = (unsigned char)strlen(s);
   if (len>WIDTH) {
-      comma = (char *)s;
-    while (*comma++!=',');
-    comma[0]=0;
-    comma++;
-    clearStatusBar();
+    /* Both rows are padded and drawn over the old text: clearing first left
+       the lower row blank for part of every poll, which flickers with no
+       double buffer. The lower row is always drawn so a one-line message
+       cannot strand the previous one's. Never cut the source string - that
+       truncated state.lastResult permanently. */
+    for (i=0; i<len && i<WIDTH && s[i]!=','; i++)
+      tempBuffer[i]=s[i];
+    n=i;
+    while (n<WIDTH)
+      tempBuffer[n++]=' ';
+    tempBuffer[n]=0;
     font_shift=1;
-    drawTextAt(0, BOTTOM-1, s);
-    drawTextAt(0, BOTTOM+8, comma);
+    drawTextAt(0, BOTTOM-1, tempBuffer);
+    if (s[i]==',') {
+      i++;
+      while (s[i]==' ')
+        i++;
+    }
+    for (n=0; n<WIDTH && s[i+n]; n++)
+      tempBuffer[n]=s[i+n];
+    while (n<WIDTH)
+      tempBuffer[n++]=' ';
+    tempBuffer[n]=0;
+    drawTextAt(0, BOTTOM+8, tempBuffer);
     font_shift=0;
   } else {
     drawStatusTextAt(0, s);
@@ -196,24 +212,9 @@ void drawCardAt(unsigned char x, unsigned char y, unsigned char partial, const c
   uint8_t* pos;
   mid = 0x1213;
 
-  if (partial == PARTIAL_LEFT) {
-    CARD_BACK(1);
-    hires_Draw(x,y+5,4,0,&charset[(uint16_t)(0x01 CHAR_SHIFT) + CHAR_ROW(4)]);
-    hires_putc(x,y+=8,0 ,0x5f);
-    hires_putc(x,y+=8,0 ,0x5f);
-    hires_Draw(x,y+=8,6,0,&charset[(uint16_t)((0x5f) CHAR_SHIFT)]);
-    hires_Draw(x,y+=5,5,0,&charset[(uint16_t)0x03 CHAR_SHIFT]);
-    CARD_BACK(0);
-  } else if (partial == PARTIAL_RIGHT) {
-    ++x;
-    CARD_BACK(1);
-    hires_Draw(x,y+5,4,0,&charset[(uint16_t)(0x02 CHAR_SHIFT) + CHAR_ROW(4)]);
-    hires_putc(x,y+=8,0 ,0x1f);
-    hires_putc(x,y+=8,0 ,0x1f);
-    hires_Draw(x,y+=8,6,0,&charset[(uint16_t)((0x1F) CHAR_SHIFT)]);
-    hires_Draw(x,y+=5,5,0,&charset[(uint16_t)0x04 CHAR_SHIFT]);
-    CARD_BACK(0);
-  } else { // Full card
+  /* 5 Card Stud's PARTIAL_LEFT/RIGHT slivers were unreachable here: Hold'em
+     deals two cards side by side and every caller passes FULL_CARD. */
+  {
 
     switch (s[1]) {
       case 'h' : suit=0x0A; red=RED; redR=RED_RIGHT; break;
@@ -242,12 +243,14 @@ void drawCardAt(unsigned char x, unsigned char y, unsigned char partial, const c
       hires_Draw(x+1,y,4,0,&charset[(uint16_t)(0x04 CHAR_SHIFT)]);
       CARD_BACK(0);
 
-      // Since a full overturned card is being drawn, we may have just folded.
-      // Blank out the rest of the hand by it (since no double buffer is used to clear screen)
-      if (x<20)
-        hires_Mask(x+2,y-26,8,29,0);
-      else
-        hires_Mask(x-8,y-26,8,29,0);
+      /* A fold sheds one card, so clear one slot. 5 Card Stud shed four and
+         cleared eight columns, which reached into the neighboring seats. */
+      if (partial & CARD_CLEAR_NEXT) {
+        if (x<20)
+          hires_Mask(x+2,y-26,2,29,0);
+        else
+          hires_Mask(x-2,y-26,2,29,0);
+      }
 
     } else {
       // Draw full card
@@ -286,27 +289,14 @@ void drawCardAt(unsigned char x, unsigned char y, unsigned char partial, const c
 #else
         pos = (uint8_t *)SCREEN+(uint16_t)(y+6)*WIDTH+x-1;
 
-        // Handle special cases for right side of screen
-        if (x==WIDTH-3) {
-             // for 32 WIDTH, make first downturned card slightly smaller
-            if (WIDTH == 32 && *(pos+2)) {
-                drawCardAt(WIDTH-2,y, PARTIAL_RIGHT, "??", 0);
-            } else if (WIDTH==40) {
-                // At this position in WIDTH 40, means drawing first card at the end of game. Clear the hidden card to the right of it
-                hires_Mask(x+1,y+1,1,28,0);
-            }
-        }
-
-        // Draw card left edge
-        if (!*pos || *pos==0x80) {
-          for(i=24;i<255;--i) {
+        /* No neighbor detection: Hold'em never overlaps cards, so it only
+           ever fired on a player's own first card. */
+        /* The += is additive, so test each row - sampling one byte lost the
+           whole edge whenever anything sat in that cell. */
+        for(i=24;i<255;--i) {
+          if (!*pos || *pos==0x80)
             *(pos) += 02;
-            pos+=WIDTH;
-          }
-        }
-        else if (*(pos+WIDTH*2)==173) {
-          // Make first downturned card slightly smaller for left side
-          drawCardAt(x-1,y, PARTIAL_LEFT, "??", 0);
+          pos+=WIDTH;
         }
 #endif
       }
