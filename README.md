@@ -19,6 +19,7 @@ client-side poker rules.
 | CoCo 1/2/3 | ✅ playable | `make coco-dist` | `r2r/coco/texas.dsk` (loader auto-picks TEXAS12/TEXAS3) |
 | Atari 8-bit | ✅ playable | FastBasic, see below | `texas.xex` |
 | MS-DOS | 🔨 builds, untested | `./make-exp msdos` | `r2r/msdos/texas.exe` + `texas.img` |
+| Intellivision | ✅ playable | `cd intv && make` | `intv/texas.rom` (jzIntv) + `texas.bin`/`.cfg` (SD via PiRTO II) |
 | C64 | ⬜ not yet converted | — | — |
 
 ## What changed from 5 Card Stud
@@ -58,6 +59,30 @@ syntax needs a target combining the Atari target with `fujinet.syn`
 ```bash
 fastbasic -t:atari-int-fn texas.bas -o texas.xex
 ```
+
+## Intellivision client (IntyBASIC)
+
+`intv/` — standalone IntyBASIC client, converted from the
+[fujinet-5cardstud](https://github.com/dillera/fujinet-5cardstud) `intv/`
+client (whose source comments document the mailbox/rendering lessons in
+detail). Talks to FujiNet through the PiRTO II cartridge's memory-mapped
+mailbox at `$9C00`; parses the `bin=1` state in place out of the RX buffer.
+Needs [IntyBASIC](https://github.com/nanochess/IntyBASIC) and `as1600`
+(from jzIntv's SDK):
+
+```bash
+cd intv
+make            # texas.rom (Intellicart, for jzIntv) + texas.bin/.cfg (SD)
+./run.sh        # build + launch in a FujiNet-patched jzIntv over BoIP
+                # (FUJINET_TARGET=localhost:9995 against fujinet-firmware)
+```
+
+Controls: disc + side button everywhere; keypad `CLEAR` = table menu,
+`ENTER` (hold) = show purses. Hold'em deltas from the 5 Card Stud client:
+wire offsets shift +11 past `viewing` (`community[11]` at 87), 2 hole cards
+per seat, community board rows 4-5 with the street label above and pot/purse
+below, and the move menu scales name width to the move count (Hold'em
+routinely offers 4 moves).
 
 ## Testing against a local server
 
