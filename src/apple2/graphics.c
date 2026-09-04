@@ -65,15 +65,21 @@ void drawStatusTextAt(unsigned char x, const char* s) {
 }
 
 void drawStatusText(const char* s) {
-  static char* comma;
+  static unsigned char len, i;
   clearStatusBar();
-  if (strlen(s)>40) {
-      comma = (char *)s;
-    while (*comma++!=',');
-    comma[0]=0;
-    comma++;
-    drawTextAt(0, BOTTOM-1, s);
-    drawTextAt(0, BOTTOM+8, comma);
+  len = (unsigned char)strlen(s);
+  if (len>40) {
+    /* Never cut the source string: that truncated state.lastResult
+       permanently, so later repaints took the single-row path. */
+    for (i=0; i<len && s[i]!=','; i++)
+      tempBuffer[i]=s[i];
+    tempBuffer[i]=0;
+    drawTextAt(0, BOTTOM-1, tempBuffer);
+    if (i<len) {
+      while (s[i]==',' || s[i]==' ')
+        i++;
+      drawTextAt(0, BOTTOM+8, s+i);
+    }
   } else {
     drawStatusTextAt(0, s);
   }

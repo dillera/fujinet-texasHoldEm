@@ -6,6 +6,8 @@
 void showInGameMenuScreen();
 void progressAnim(unsigned char y);
 void drawPot();
+void layoutMoveMenu();
+void drawMoveNumber();
 void drawStreetLabel();
 void resetStateIfNewGame();
 void drawNamePurse();

@@ -13,6 +13,30 @@
 _WCIRTLINK extern unsigned inp(unsigned __port);
 _WCIRTLINK extern unsigned outp(unsigned __port, unsigned __value);
 
+/* Never time off the VGA retrace at 0x3DA: QEMU toggles the bit on every read,
+ * so both polls fall through and the tone is gated off before it can sound.
+ * The PIT helpers live in graphics.c, which also paces frames off them. */
+extern unsigned int pitTicksPerMs;
+extern unsigned int pitRead(void);
+extern void calibratePit(void);
+
+/* One frame per pass, so counter 0 cannot wrap mid wait. */
+static void wait_frames(unsigned int frames)
+{
+    unsigned int start, want;
+
+    if (!pitTicksPerMs)
+        calibratePit();
+
+    want = (unsigned int)(((unsigned long)pitTicksPerMs * 50UL) / 3UL);  /* 16.67ms */
+
+    while (frames--) {
+        start = pitRead();
+        while ((unsigned int)(start - pitRead()) < want)
+            ;                                /* PIT counts down */
+    }
+}
+
 /**
  * @brief Beep the speaker for the specified # of VBLANK frames
  * @param frequency Frequency in Hz
@@ -38,26 +62,14 @@ void beep(unsigned int frequency, unsigned int frames, unsigned int wait) {
     outp(SPEAKER_CONTROL_PORT, tmp | 0x03);
 
     // Delay for # of frames
-    while (frames--)
-    {
-        // Wait until vblank starts
-        while(!(inp(0x3DA) & 0x08));
-        // Wait until vblank stops
-	while(inp(0x3DA) & 0x08);
-    }
+    wait_frames(frames);
 
     // Turn off the speaker (clear bit 0, keep bit 1 for PIT gate)
     tmp = inp(SPEAKER_CONTROL_PORT);
     outp(SPEAKER_CONTROL_PORT, tmp & ~0x03);
 
     // Wait for # of frames
-    while (wait--)
-    {
-        // Wait until vblank starts
-        while(!(inp(0x3DA) & 0x08));
-        // Wait until vblank stops
-	while(inp(0x3DA) & 0x08);
-    }
+    wait_frames(wait);
 }
 
 void initSound()

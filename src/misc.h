@@ -111,7 +111,7 @@ extern int inputKey;
 #else
 extern char inputKey;
 #endif
-extern unsigned char prevPlayerCount, prevRound, currentCard, cardIndex, xOffset, fullFirst, cursorX, cursorY, waitCount, wasViewing;
+extern unsigned char prevPlayerCount, prevRound, currentCard, cardIndex, cursorX, cursorY, waitCount, wasViewing;
 extern signed char inputDirX, inputDirY;
 
 extern uint16_t prevPot, maxJifs;

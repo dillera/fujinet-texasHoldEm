@@ -8,6 +8,9 @@
 #define PARTIAL_LEFT 1
 #define PARTIAL_RIGHT 2
 #define FULL_CARD 3
+/* OR'd in when this card is all that is left of a hand, so platforms with no
+   double buffer clear the slot the dropped card used to occupy. */
+#define CARD_CLEAR_NEXT 4
 
 #ifdef _CMOC_VERSION_
 #include "../coco/coco_bool.h"
