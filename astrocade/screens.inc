@@ -66,7 +66,7 @@ TBKEY:  CALL    KEYSCN
         JR      Z,TBKEY
         DEC     A
         LD      (V_SEL),A
-        CALL    SNDKEY
+        CALL    SNDCUR
         CALL    TBDRAW
         JR      TBKEY
 TBK1:   CP      'D'
@@ -77,7 +77,7 @@ TBK1:   CP      'D'
         CP      (HL)
         JR      NC,TBKEY
         LD      (V_SEL),A
-        CALL    SNDKEY
+        CALL    SNDCUR
         CALL    TBDRAW
         JR      TBKEY
 TBK2:   CP      'E'             ; CE: back to the name screen
@@ -122,6 +122,15 @@ TBJOIN: CALL    SNDSEL
         LD      A,0FFH          ; force the new-hand path on first poll
         LD      (PRVRND),A
         LD      (PRVACT),A      ; and arm the your-turn cue
+        XOR     A
+        LD      (PRVPC),A       ; no "player joined" for our own arrival
+        LD      (V_MNU),A
+        LD      (V_MUTE),A
+        LD      H,A
+        LD      L,A
+        LD      (PRVPOT),HL
+        LD      A,SQJOIN        ; sat down: cued once the table is drawn
+        LD      (V_SNDQ),A
         JP      GAMELP
 
 ; TBOFF: HL = window offset of table record A (1 + A*36, and 36 = 32+4).
@@ -195,18 +204,22 @@ GAMELP: LD      A,(MOVBUF)      ; a staged move rides the next request --
         JR      Z,GLREQ
         LD      A,2
 GLREQ:  CALL    APICALL
-        JR      C,GLFAIL
+        JP      C,GLFAIL
         XOR     A
         LD      (MOVBUF),A      ; consumed
         CALL    CHKNEW
         CALL    RENDER
+        XOR     A
+        LD      (V_MUTE),A
+        CALL    SNDQPL          ; the cues CHKNEW queued, now it is drawn
         LD      B,90            ; ~2 s of input scanning between polls
 GLWAIT: PUSH    BC
+        CALL    KNOBCK
         CALL    KEYSCN
         POP     BC
         OR      A
         JR      NZ,GLKEY
-        LD      DE,2500         ; ~20 ms
+GLNEXT: LD      DE,2500         ; ~20 ms
 GLDLY:  DEC     DE
         LD      A,D
         OR      E
@@ -223,30 +236,21 @@ GLK1:   CP      '.'             ; how to play, then a forced full redraw
         CALL    HELPSCR
         LD      A,0FFH
         LD      (PRVRND),A
+        LD      (V_MUTE),A      ; ...which is not a deal: no clicks
         JP      GAMELP
-GLK1A:  CP      '1'
-        JR      C,GLK3          ; '0' (or below): refresh now
-        CP      '5'+1
-        JR      NC,GLK3
-        SUB     '1'             ; keypad 1-5 -> validMoves 0-4
-        LD      HL,GOMVCNT
-        LD      B,A
-        CALL    RXGETB
-        LD      C,A
-        LD      A,B
-        CP      C
-        JR      NC,GLK3         ; not on the menu right now
-        LD      L,A             ; move code offset = GOMOVES + n*13
-        LD      H,0
-        LD      E,A
-        LD      D,H
-        ADD     HL,HL
-        ADD     HL,DE           ; *3
-        ADD     HL,HL
-        ADD     HL,HL           ; *12
-        ADD     HL,DE           ; *13
-        LD      DE,GOMOVES
-        ADD     HL,DE
+GLK1A:  LD      C,A             ; the hand controller works the menu,
+        LD      A,(V_MNU)       ; while there is one
+        OR      A
+        JR      Z,GLK3
+        LD      A,C
+        CP      'L'
+        JR      Z,GLLEFT
+        CP      'R'
+        JR      Z,GLRGHT
+        CP      'T'
+        JR      NZ,GLK3
+        LD      A,(V_MSEL)      ; trigger: stage the highlighted move
+        CALL    MVOFF
         CALL    RXGETB
         LD      (MOVBUF),A
         INC     HL
@@ -254,6 +258,52 @@ GLK1A:  CP      '1'
         LD      (MOVBUF+1),A
         CALL    SNDSEL
 GLK3:   JP      GAMELP          ; poll immediately (move or refresh)
+GLLEFT: LD      A,(V_MSEL)
+        OR      A
+        JR      Z,GLBUMP
+        DEC     A
+        JR      GLMOVE
+GLRGHT: LD      A,(V_MSEL)
+        INC     A
+        LD      HL,V_MNU
+        CP      (HL)
+        JR      NC,GLBUMP
+GLMOVE: LD      (V_MSEL),A      ; the stick steps the cursor and stays in
+        PUSH    BC              ; the wait: B still counts to the next poll
+        CALL    SNDCUR
+        CALL    BARMNU
+        POP     BC
+        JR      GLNEXT
+GLBUMP: PUSH    BC
+        CALL    SNDBAD
+        POP     BC
+        JR      GLNEXT
+
+; KNOBCK: the knob picks a move by position -- the menu split into equal
+; arcs. It only takes over once it has actually been turned (6 steps of
+; hysteresis, which also rides out pot jitter), so the stick's choice is
+; not yanked back to wherever the knob happens to rest. Clobbers all.
+KNOBCK: LD      A,(V_MNU)
+        OR      A
+        RET     Z
+        CALL    KNOBRD
+        LD      C,A
+        LD      HL,V_KNOB
+        SUB     (HL)
+        JR      NC,KNC1
+        NEG
+KNC1:   CP      6
+        RET     C
+        LD      (HL),C
+        LD      A,C
+        CALL    KNOBZN
+        LD      HL,V_MSEL
+        CP      (HL)
+        RET     Z
+        LD      (HL),A
+        CALL    SNDCUR
+        JP      BARMNU
+
 GLFAIL: LD      HL,TBANG        ; a red mark in the corner; back off and
         LD      DE,0*256+39     ; try again
         LD      C,XRONF
@@ -277,21 +327,64 @@ GLFD:   DEC     DE
 
 ; CHKNEW: a new hand (round dropped) or a changed seat count means the
 ; screen holds cards that no longer exist: clear and redraw the statics.
-CHKNEW: LD      HL,GOROUND
-        CALL    RXGETB
-        LD      HL,PRVRND
-        CP      (HL)
-        LD      (HL),A
-        JR      C,CHKN1
+; The same edges are the C clients' event cues -- a player arriving or
+; leaving, the showdown, the bets swept in at a new street -- so they are
+; queued here and played after the render.
+CHKNEW: LD      E,0             ; E != 0: the screen needs a full clear
         LD      HL,GOPLCNT
         CALL    RXGETB
+        LD      B,A             ; B = seats now
         LD      HL,PRVPC
-        CP      (HL)
+        LD      C,(HL)          ; C = seats last poll
         LD      (HL),A
-        RET     Z
-CHKN1:  LD      HL,GOPLCNT      ; keep PRVPC honest on the round path too
+        CP      C
+        JR      Z,CKRND
+        INC     E
+        LD      A,C             ; 0: our first poll here, not news
+        OR      A
+        JR      Z,CKRND
+        LD      A,B
+        CP      2               ; the C clients stay quiet below two
+        JR      C,CKRND
+        CP      C
+        LD      A,SQPJN
+        JR      NC,CKPC1
+        LD      A,SQPLF
+CKPC1:  CALL    SQADD
+CKRND:  LD      HL,GOROUND
         CALL    RXGETB
-        LD      (PRVPC),A
+        LD      HL,PRVRND
+        LD      C,(HL)          ; C = round last poll (FFH = forced redraw)
+        LD      (HL),A
+        CP      C
+        JR      NC,CKR1
+        INC     E               ; dropped: a new hand
+        JR      CKR9
+CKR1:   JR      Z,CKR9          ; same street
+        CP      5               ; a new street; the showdown gets a fanfare
+        JR      NZ,CKR2
+        LD      A,SQDONE
+        CALL    SQADD
+CKR2:   LD      A,C             ; out of round 0 there are no bets to sweep
+        OR      A
+        JR      Z,CKR9
+        PUSH    DE
+        LD      HL,GOPOT        ; the bets went in if the pot moved
+        CALL    RXGETW
+        LD      HL,(PRVPOT)
+        LD      (PRVPOT),DE
+        LD      A,D
+        OR      E
+        JR      Z,CKR3
+        OR      A
+        SBC     HL,DE
+        JR      Z,CKR3
+        LD      A,SQCHIP
+        CALL    SQADD
+CKR3:   POP     DE
+CKR9:   LD      A,E
+        OR      A
+        RET     Z
 ; falls through into GSTATIC
 
 ; GSTATIC: clear + the parts of the game screen a poll never changes.
@@ -337,6 +430,18 @@ RNDOK:  ADD     A,A             ; STREETS is 8 space-padded bytes per round
         JR      Z,RENDA2
         OR      A
         JR      NZ,RENDA2
+        LD      HL,GOMVCNT      ; a fresh turn: the cursor starts on the
+        CALL    RXGETB          ; second move (call/check) when there is
+        CP      2               ; one, as in the C clients
+        LD      A,0
+        JR      C,RENDA1
+        INC     A
+RENDA1: LD      (V_MSEL),A
+        CALL    KNOBRD          ; the knob follows from where it rests
+        LD      (V_KNOB),A
+        LD      HL,GOMVTIM      ; the clock starts here: no tick for it
+        CALL    RXGETB
+        LD      (PRVTIM),A
         CALL    SNDTRN
 RENDA2: LD      HL,GOPLCNT
         CALL    RXGETB
@@ -468,6 +573,7 @@ SEATH:  LD      HL,(V_BASE)     ; the hand: 2 hole cards
         LD      HL,PRVHND       ; turns "????" into "??" mid-hand, and the
         CALL    TBLK            ; card that went away is not overdrawn
         LD      C,A
+        CALL    DEALCK
         CALL    HNDBLK
         LD      A,(V_SEAT)
         LD      HL,PRVHND
@@ -495,12 +601,34 @@ BOARD:  LD      HL,GOCOMM
         LD      A,(PRVCOM)
         LD      C,A
         LD      DE,6*256+14
+        CALL    DEALCK
         CALL    HNDBLK
         LD      A,(V_NCNT)
         LD      (PRVCOM),A
         LD      HL,HANDBUF
         LD      B,5
         JP      DRWHND
+
+; DEALCK: a click per card that has just appeared -- (V_NCNT) now against
+; C last poll -- which is the C clients' deal and street animation in
+; sound. Preserves BC,DE.
+DEALCK: LD      A,(V_MUTE)
+        OR      A
+        RET     NZ
+        LD      A,(V_NCNT)
+        SUB     C
+        RET     Z
+        RET     C
+        PUSH    BC
+        PUSH    DE
+DLK1:   PUSH    AF
+        CALL    SNDDEAL
+        POP     AF
+        DEC     A
+        JR      NZ,DLK1
+        POP     DE
+        POP     BC
+        RET
 
 ; HNDCNT: (V_NCNT) = cards in HANDBUF -- two wire chars per card, and the
 ; field is packed from the left, so it is just the length halved.
@@ -657,26 +785,76 @@ BAR:    LD      HL,NORMEM+14*240
         CP      6               ; the wire says at most 5, but this indexes
         JR      C,BARMC         ; a table and bounds a loop: do not trust it
         LD      A,5
-BARMC:  LD      (V_CNT),A       ; menu: "1 NAME 2 NAME ..."
-        LD      HL,MVLEN-1      ; name width, scaled to the move count
-        LD      E,A
+BARMC:  LD      (V_MNU),A
+        LD      HL,GOMVTIM      ; the move clock, audibly, on your turn
+        CALL    RXGETB
+        LD      HL,PRVTIM
+        CP      (HL)
+        LD      (HL),A
+        CALL    NZ,SNDTICK
+; falls into BARMNU
+
+; BARMNU: the (V_MNU) entries of the move menu, the one at V_MSEL
+; inverse. No digits any more -- the stick or knob moves the highlight
+; and the trigger bets it -- so each entry is a lead space and the name
+; in one field, then a white gap. Also the stick/knob's redraw, which is
+; why it stands alone. Clobbers everything.
+BARMNU: LD      A,(V_MNU)
+        LD      C,A
+        LD      A,(V_MSEL)      ; the count can change under the cursor
+        CP      C
+        JR      C,BMN1
+        LD      A,C
+        DEC     A
+        LD      (V_MSEL),A
+BMN1:   LD      HL,MVLEN-1      ; name width, scaled to the move count
+        LD      E,C
         LD      D,0
         ADD     HL,DE
         LD      A,(HL)
         LD      (V_MVL),A
+        LD      A,' '
+        LD      (PADBUF),A
         XOR     A
         LD      (V_TMP2),A
         LD      (BARCOL),A
 BARM:   LD      A,(V_TMP2)
-        LD      HL,V_CNT
+        LD      HL,V_MNU
         CP      (HL)
         RET     NC
-        ADD     A,'1'           ; the digit
-        LD      (HEXBUF),A
-        XOR     A
-        LD      (HEXBUF+1),A
-        LD      A,(V_TMP2)      ; the name: GOMOVES + n*13 + MVNAME
-        LD      L,A
+        CALL    MVOFF           ; the name: GOMOVES + n*13 + MVNAME
+        LD      DE,MVNAME
+        ADD     HL,DE
+        LD      DE,LINBUF
+        LD      B,10
+        CALL    RXSTRN
+        LD      A,(V_MVL)
+        CALL    MVCOMP
+        LD      A,(V_MSEL)
+        LD      HL,V_TMP2
+        CP      (HL)
+        LD      C,XWONK
+        JR      Z,BARM1
+        LD      C,XKONW
+BARM1:  LD      A,(BARCOL)
+        LD      E,A
+        LD      D,14
+        LD      A,(V_MVL)       ; lead space + name field
+        INC     A
+        LD      B,A
+        LD      HL,PADBUF
+        CALL    TXTN
+        LD      A,(V_MVL)       ; advance: space + name + gap
+        ADD     A,2
+        LD      HL,BARCOL
+        ADD     A,(HL)
+        LD      (HL),A
+        LD      HL,V_TMP2
+        INC     (HL)
+        JR      BARM
+
+; MVOFF: HL = window offset of move slot A (GOMOVES + A*13). Clobbers DE.
+MVOFF:  LD      L,A
         LD      H,0
         LD      E,A
         LD      D,H
@@ -685,43 +863,18 @@ BARM:   LD      A,(V_TMP2)
         ADD     HL,HL
         ADD     HL,HL           ; *12
         ADD     HL,DE           ; *13
-        LD      DE,GOMOVES+MVNAME
+        LD      DE,GOMOVES
         ADD     HL,DE
-        LD      DE,LINBUF
-        LD      B,10
-        CALL    RXSTRN
-        LD      A,(V_MVL)
-        CALL    MVCOMP
-        LD      A,(BARCOL)      ; digit
-        LD      E,A
-        LD      D,14
-        LD      HL,HEXBUF
-        LD      C,XRONW
-        CALL    TXTAT
-        LD      A,(BARCOL)      ; name, in its fixed field
-        ADD     A,2
-        LD      E,A
-        LD      D,14
-        LD      HL,LINBUF
-        LD      C,XKONW
-        LD      A,(V_MVL)
-        LD      B,A
-        CALL    TXTN
-        LD      A,(V_MVL)       ; advance: digit + space + name + space
-        ADD     A,3
-        LD      HL,BARCOL
-        ADD     A,(HL)
-        LD      (HL),A
-        LD      A,(V_TMP2)
-        INC     A
-        LD      (V_TMP2),A
-        JR      BARM
+        RET
+
 ; Not your turn. The server leaves lastResult holding the PREVIOUS hand's
 ; winner for the whole next hand, so showing it whenever the menu is down
 ; parks a stale banner on screen all hand long. Show it only between
 ; hands (round 0) and at the showdown; during a live hand, say whose
 ; turn it is.
-BARLR:  LD      HL,GOROUND
+BARLR:  XOR     A               ; no menu: the stick and knob rest
+        LD      (V_MNU),A
+        LD      HL,GOROUND
         CALL    RXGETB
         OR      A
         JR      Z,BARRES        ; between hands: the result stands
@@ -803,9 +956,9 @@ HELPTX: DB      13,"HOW TO PLAY",0
         DB      1,"EACH. THE BEST FIVE CARD HAND",0
         DB      1,"TAKES THE POT.",0
         DB      0,"",0
-        DB      1,"KEYPAD 1-5 CHOOSES A MOVE",0
+        DB      1,"STICK OR KNOB PICKS A MOVE",0
+        DB      1,"TRIGGER BETS IT, JOINS A TABLE",0
         DB      1,"0 POLLS NOW    CE LEAVES",0
-        DB      1,"STICK PICKS    TRIGGER JOINS",0
         DB      1,". SHOWS THIS SCREEN",0
         DB      0,"",0
         DB      1,"TH.CARR-DESIGNS.COM",0
@@ -859,10 +1012,11 @@ MVC3A:  LD      A,(HL)
         JR      NZ,MVC3A
         RET
 
-; Move-name width by move count, 1-5. Each entry costs the digit, a space,
-; the name and a trailing space, so the strides are 13/13/13/10/8 -- five
-; moves fill the 40-column row exactly and four leave it flush.
-MVLEN:  DB      10,10,10,7,5
+; Move-name width by move count, 1-5. Each entry costs a lead space, the
+; name and a trailing gap, so the strides are 13/13/13/10/8 -- five moves
+; fill the 40-column row exactly and four leave it flush. (RXSTRN caps a
+; name at 10, and the server's run to 9.)
+MVLEN:  DB      11,11,11,8,6
 
 ; STRLEN: A = length of the string at HL. Clobbers HL.
 STRLEN: PUSH    BC

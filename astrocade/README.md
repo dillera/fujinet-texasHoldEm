@@ -113,6 +113,21 @@ reclaimed width is what the community board lives in.
   `raise 15` -> `R15`, `all-in` -> `ALLIN` — and the stride comes from a
   table indexed by the move count, so five moves fill cols 0-39 exactly
   and shorter menus still show their names in full.
+* **Choosing a move.** The menu has no digits: the highlighted entry
+  (white on black) is moved with the stick, one step per push, or by
+  twisting the knob, which splits the menu into equal arcs of its travel,
+  and the trigger bets it. The cursor starts on the second move
+  (call/check) each turn, as in the C clients. The knob only takes over
+  once it has turned 6 steps from where it rested, so it neither jitters
+  between neighbours nor snaps back over a choice made with the stick.
+  Right is later: the pot reads higher twisting right (checked in MAME).
+* **Sound.** Every cue in `src/platform-specific/sound.h` is here, with
+  the Intellivision port's pitches: join, your turn, the tick of your move
+  clock (each poll that changes it), cursor and cursor-at-an-end, select,
+  a noise click per card dealt (seats and board), the chip sweep at a new
+  street, player joined/left, and the showdown fanfare. Event cues are
+  queued while `CHKNEW` examines the poll and played after the render, so
+  the news is on screen when it sounds.
 * **Seat geometry.** Two-card hands are re-anchored: the centre seats sit
   on the board's own axis (px 78), the right seats align to the right edge
   of their name field. The top seats' bets moved down onto their hand row,
@@ -124,8 +139,8 @@ reclaimed width is what the community board lives in.
 ## Controls
 
     stick / keypad arrows   move through lists, turn the name wheel
-    trigger                 select / join / accept
-    keypad 1-5              choose a move when it is your turn
+    stick left/right, knob  move the highlight along the move menu
+    trigger                 select / join / accept / bet the highlighted move
     keypad 0                poll now
     CE                      leave the table (name screen from the list)
     .                       how to play
@@ -133,9 +148,10 @@ reclaimed width is what the community board lives in.
 ## Testing
 
 `make smoke` runs MAME headless with `emu/smoke.lua`: launch from the OS
-menu, accept the default name, join a table by digit, then press keypad 2
-every 3 seconds so some presses land inside real move windows (the AI ROOM
-bots keep the hand moving), snapshot to `build/astrocde/0000.png`.
+menu, accept the default name, join a table by keypad digit, then every 3
+seconds twist the knob and pull the trigger so some presses land inside
+real move windows (the AI ROOM bots keep the hand moving), snapshot to
+`build/astrocde/0000.png`.
 `FUJINET_DEBUG=1` (default) logs every mailbox transaction; a `/state` for
 an N-player table reads back exactly `165 + 33*N` bytes, and a `/move`
 shows as an OPEN two bytes longer than `/state`'s.
@@ -161,7 +177,7 @@ always has action.
 Working end to end against a live server: table list, join, live rendering
 of multi-player bot tables across every street, the community board, the
 street label, moves, the showdown reveal, leave, the last-result banner,
-the your-turn cue, and RESET continuity. Not yet done: appkey persistence
+the full cue set, and RESET continuity. Not yet done: appkey persistence
 for the username and the lobby server override (the 5 Card Stud client
 does not have them either), and nothing has run on real hardware, because
 the cartridge itself has not been built.

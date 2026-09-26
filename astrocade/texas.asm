@@ -35,6 +35,15 @@ PRVCOM  EQU     4E18H           ; community cards drawn last poll
 PRVRND  EQU     4E19H
 PRVACT  EQU     4E1AH
 PRVPC   EQU     4E1BH
+PRVTIM  EQU     4E1FH           ; move clock last poll (the tick cue's edge)
+PRVPOT  EQU     4E20H           ; pot at the last street change, u16
+
+; The move menu and the cue queue.
+V_MSEL  EQU     4E1CH           ; highlighted move
+V_MNU   EQU     4E1DH           ; moves on the menu now; 0 = menu down
+V_KNOB  EQU     4E1EH           ; knob reading the cursor last followed
+V_SNDQ  EQU     4E22H           ; cues waiting for the render (SQ* bits)
+V_MUTE  EQU     4E23H           ; nonzero: this render deals no clicks
 
 ; Session state.
 PLNBUF  EQU     4E30H           ; player name, 9 + NUL
@@ -66,6 +75,8 @@ NAMEED  EQU     4EA0H           ; name-entry edit buffer, 8 slots
 TBLNAM  EQU     4E70H           ; joined table's display name, 21 + NUL
 HANDBUF EQU     4E88H           ; hand or board being drawn, 11 + NUL
 
+PADBUF  EQU     4EFFH           ; one cell before LINBUF: a menu entry's
+                                ; lead space, so pad + name draw as one field
 LINBUF  EQU     4F00H           ; display line being built (fujicfg style)
 HEXBUF  EQU     4F30H
 STACK   EQU     4FC0H           ; grows down; 4FC0H+ left to the BIOS cells

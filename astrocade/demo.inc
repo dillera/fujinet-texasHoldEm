@@ -179,7 +179,10 @@ DEMOSCR:
         LD      DE,14*256+0
         LD      C,XKONW
         CALL    TXTAT
-        RET
+        LD      HL,DMSEL        ; the highlighted move, as BARMNU draws it
+        LD      DE,14*256+8
+        LD      C,XWONK
+        JP      TXTAT
 
 ; DBET: a chip at D,E with the amount in HL drawn just right of it.
 DBET:   PUSH    HL
@@ -202,7 +205,8 @@ DSTREET: DB     "RIVER   ",0
 DPURSE: DB      "PURSE",0
 DBETL:  DB      "BET",0
 DCLOCK: DB      "12",0
-DMENU:  DB      "1 FOLD  2 CHECK 3 B10   4 B20   5 A500  ",0
+DMENU:  DB      " FOLD    CHECK   B10     B20     A500  ",0
+DMSEL:  DB      " CHECK ",0
 DNAME0: DB      "YOU",0
 DNAME1: DB      "MOZZWALD",0
 DNAME2: DB      "ERICJ",0
