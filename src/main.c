@@ -49,7 +49,7 @@ int inputKey;
 #else
 char inputKey;
 #endif
-unsigned char playerCount, prevPlayerCount, validMoveCount, prevRound, tableCount, currentCard, cardIndex, xOffset, fullFirst, cursorX, cursorY, waitCount, wasViewing;
+unsigned char prevPlayerCount, prevRound, currentCard, cardIndex, cursorX, cursorY, waitCount, wasViewing;
 signed char inputDirX, inputDirY;
 uint16_t prevPot, maxJifs;
 bool noAnim, doAnim, finalFlip, inputTrigger;

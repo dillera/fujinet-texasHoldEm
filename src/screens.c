@@ -94,19 +94,25 @@ void showHelpScreen() {
   BUMP_LINE
   #endif
                   //12345678901234567890123456789012
-  y++;centerText(y, "YOU GET 2 CARDS. 5 SHARED     ");
-  y++;centerText(y, "CARDS ARE DEALT IN THE MIDDLE.");
+  y++;centerText(y, "2 CARDS EACH, 5 IN THE MIDDLE.");
   y++;centerText(y, "BEST 5-CARD HAND WINS THE POT.");
   y+=2;
 
   centerText(y, "MOVES");
 
   BUMP_LINE        //12345678901234567890123456789012
-  y++;centerText(y, "FOLD  - QUIT THE HAND        ");BUMP_LINE
-  y++;centerText(y, "CHECK - FREE PASS            ");BUMP_LINE
-  y++;centerText(y, "BET / - INCREASE BET. OTHERS ");
-  y++;centerText(y, "RAISE   MUST CALL TO STAY IN ");BUMP_LINE
-  y++;centerText(y, "ALL-IN- BET ALL YOUR CHIPS   ");
+  y++;centerText(y, "FOLD  - QUIT THE HAND     ");BUMP_LINE
+  y++;centerText(y, "CHECK - FREE PASS         ");BUMP_LINE
+  y++;centerText(y, "CALL  - MATCH THE BET     ");BUMP_LINE
+  y++;centerText(y, "RAISE - INCREASE THE BET  ");BUMP_LINE
+  y++;centerText(y, "ALL-IN- BET ALL YOUR CHIPS");
+
+/* Lynx has no room for these; every supported platform does. */
+#if HEIGHT >= 20
+  y++;             //12345678901234567890123456789012
+  y++;centerText(y, "LEFT/RIGHT PICKS THE MOVE");
+  y++;centerText(y, "UP/DOWN SETS THE AMOUNT  ");
+#endif
 
   CLEAR_BUMP
 

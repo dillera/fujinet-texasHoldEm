@@ -36,6 +36,15 @@ extern unsigned char redrawGameScreen;
 #define LEFT_JUSTIFY_PLAYER_PURSE 0
 #endif
 
+/* 32 columns only fit four, clipping RAISE/CHECK to RAIS/CHEC. */
+#ifndef MOVE_FIELD_W
+#if WIDTH >= 40
+#define MOVE_FIELD_W 5
+#else
+#define MOVE_FIELD_W 4
+#endif
+#endif
+
 // Texas Hold'em community card board position (5 cards, 2 columns each)
 #ifndef COMMUNITY_X
 #define COMMUNITY_X (WIDTH/2-5)
@@ -55,29 +64,51 @@ void progressAnim(unsigned char y) {
 void drawPot() {
 
   if (redrawGameScreen) {
-    drawBox(WIDTH/2-3,11+POT_Y_MODIFIER,4,1);
-    drawChip(WIDTH/2-2,12+POT_Y_MODIFIER);
+    /* One wider than 5 Card Stud's: its interior held only three digits. */
+    drawBox(WIDTH/2-4,11+POT_Y_MODIFIER,5,1);
+    drawChip(WIDTH/2-3,12+POT_Y_MODIFIER);
   }
   itoa(state.pot, tempBuffer, 10);
-  drawText(WIDTH/2-(state.pot>99 ? 1:0),12+POT_Y_MODIFIER, tempBuffer);
+  /* padded, so a shrinking pot leaves no stale digit */
+  for (k=(unsigned char)strlen(tempBuffer); k<4; k++)
+    tempBuffer[k]=' ';
+  tempBuffer[4]=0;
+  drawText(WIDTH/2-2,12+POT_Y_MODIFIER, tempBuffer);
 }
 
 // Texas Hold'em street indicator, drawn on the pot row just left of the pot
 // box - the one spot that is clear of player names/purses on every platform.
 // Labels are padded to a fixed width so each one fully overwrites the previous.
+#if WIDTH >= 40
+#define STREET_X (WIDTH/2-13)
+static const char* streetNames[6] = {
+  "         ", "PRE-FLOP ", "FLOP     ", "TURN     ", "RIVER    ", "SHOWDOWN "
+};
+#else
+#define STREET_X 0
+/* 32 columns: an eighth player puts a status field at columns 6-9, so the
+   wording is cut to five there and only there. One table holds both forms -
+   rows 0-5 spelled out, rows 6-11 cut - to save a second static on the
+   tightest build. */
+static const char streetNames[12][10] = {
+  "         ", "PRE-FLOP ", "FLOP     ", "TURN     ", "RIVER    ", "SHOWDOWN ",
+  "     ",     "PRE  ",     "FLOP ",     "TURN ",     "RIVER",     "SHOW "
+};
+#endif
+
 void drawStreetLabel() {
-  static const char* streetNames[6] = {
-    "         ", "PRE-FLOP ", "FLOP     ", "TURN     ", "RIVER    ", "SHOWDOWN "
-  };
   if (state.round > 5 || state.playerCount < 2)
     return;
 #if defined(BUILD_COLECO) || defined(BUILD_NES)
-  // The shared spot (WIDTH/2-13 == column 3) sits on the left seat's cards on
-  // a 32-column table, and the pot now lives below the board. Row 8 is the
-  // clear gap between the top seats (cards end row 7) and the board (row 9).
+  // The shared spot sits on the left seat's cards on a 32-column table, and
+  // the pot now lives below the board. Row 8 is the clear gap between the top
+  // seats (cards end row 7) and the board (row 9).
   drawText(WIDTH/2-4, 8, streetNames[state.round]);
+#elif WIDTH >= 40
+  drawText(STREET_X, 12+POT_Y_MODIFIER, streetNames[state.round]);
 #else
-  drawText(WIDTH/2-13, 12+POT_Y_MODIFIER, streetNames[state.round]);
+  drawText(STREET_X, 12+POT_Y_MODIFIER,
+           streetNames[state.round + (state.playerCount > 7 ? 6 : 0)]);
 #endif
 }
 
@@ -99,7 +130,6 @@ void resetStateIfNewGame() {
     drawBuffer();
   }
 
-  xOffset=0;
   currentCard=0;
   cardIndex=0;
   cursorY=246;
@@ -200,26 +230,26 @@ void drawBets() {
       drawChip(x-1,y );
     } 
 
-    #if WIDTH>=40
-    // Draw Move in a fixed 5-character field (padded, right-aligned for
-    // right-side seats) so a shorter move always fully overwrites a longer
-    // previous one - variable-width redraws left stale text fragments
+    // Fixed-width field so a shorter move fully overwrites a longer one
+#if WIDTH < 40
+    /* No room beside seat 7 on 32 columns, and it only exists at seven. */
+    if (i==0 && state.playerCount > 6) continue;
+#endif
     x= playerX[i]+playerBetX[i];
     y--;
 
     k=(unsigned char)strlen(state.players[i].move);
-    if (k>5) k=5;
-    memcpy(tempBuffer, "     ", 5);
-    tempBuffer[5]=0;
+    if (k>MOVE_FIELD_W) k=MOVE_FIELD_W;
+    memcpy(tempBuffer, "     ", MOVE_FIELD_W);
+    tempBuffer[MOVE_FIELD_W]=0;
     if (playerDir[i]<0) {
-      x-=5;
-      memcpy(tempBuffer+5-k, state.players[i].move, k);
+      x-=MOVE_FIELD_W;
+      memcpy(tempBuffer+MOVE_FIELD_W-k, state.players[i].move, k);
     } else {
       memcpy(tempBuffer, state.players[i].move, k);
     }
 
     drawText(x, y, tempBuffer);
-    #endif
 
   }
 }
@@ -249,7 +279,11 @@ void drawCards(bool finalFlip) {
       i = h % state.playerCount;
       hand = state.players[i].hand;
       if (strlen(hand)>j*2+1) {
-        drawCard(playerX[i]+(j*2)*playerDir[i], playerY[i], FULL_CARD, hand+j*2, false);
+        /* A one-card hand is a fold: the renderer wipes the empty slot. */
+        drawCard(playerX[i]+(j*2)*playerDir[i], playerY[i],
+                 (unsigned char)(strlen(hand) > 3 ? FULL_CARD
+                                                  : (FULL_CARD | CARD_CLEAR_NEXT)),
+                 hand+j*2, false);
 
         if (doAnim) {
           soundDealCard();
@@ -341,6 +375,9 @@ void checkIfSpectatorStatusChanged() {
 void checkIfPlayerCountChanged() {
   if (state.playerCount == prevPlayerCount)
     return;
+
+  // Seats move below, so whatever they drew at the old ones must be cleared
+  redrawGameScreen = 1;
 
   // Handle if player joins mid game
   if (state.playerCount>1 && prevPlayerCount > 0) {
@@ -508,44 +545,174 @@ void drawGameStatus() {
 
 }
 
-#if WIDTH<40
-// 32 columns can't fit five full move names ("Fold  Call 10  Raise 20
-// Raise 30  All-in" is 44 chars) - the status bar wraps and scrolls the
-// screen. Render compact labels instead: spaces and dashes stripped
-// ("All-in" -> "Allin"), and when that still exceeds 5 chars keep the
-// first letter plus the amount ("Raise 200" -> "R200", "Call 10" -> "C10").
-// Worst case is 5 labels of 5 chars with 1-space gaps starting at column
-// 0: ends at column 28, clear of the move timer at the right edge.
-static char moveLabel[6];
-static unsigned char moveLen[5];
-#define MOVE_NAME_LEN(n) moveLen[n]
+/* The server's five moves will not fit a 40-column status bar beside the
+   countdown clock, so call and raise share one label and one amount. Folding
+   them together is display only: each stop still sends its own move code. */
 
-static void compactMoveName(const char* name) {
-  static unsigned char si, di, lastSpace;
-  lastSpace = 0;
-  di = 0;
-  for (si=0; name[si]; ++si) {
-    if (name[si]==' ')
-      lastSpace = si;
-    else if (name[si]!='-')
-      di++;
+#define MV_OTHER 0
+#define MV_FOLD  1
+#define MV_CALL  2      /* call or check */
+#define MV_RAISE 3      /* raise or bet  */
+#define MV_ALLIN 4
+
+static unsigned char moveLen[5];    /* underline width per cursor stop     */
+static unsigned char moveRef[5];    /* validMoves index per cursor stop    */
+static unsigned char raiseIdx[5];   /* validMoves index of each raise      */
+static unsigned char stopCount, raiseStop, raiseCount, raiseSel, callRef;
+static unsigned char numCol, numWidth, menuX, menuEnd;
+
+static unsigned char moveClass(const char *n) {
+  switch (n[0]) {
+    case 'F': case 'f': return MV_FOLD;
+    case 'C': case 'c': return MV_CALL;
+    case 'R': case 'r':
+    case 'B': case 'b': return MV_RAISE;
+    case 'A': case 'a': return MV_ALLIN;
   }
-  if (di>5 && lastSpace) {
-    moveLabel[0] = name[0];
-    di = 1;
-    for (si=lastSpace+1; name[si] && di<5; ++si)
-      moveLabel[di++] = name[si];
-  } else {
-    di = 0;
-    for (si=0; name[si] && di<5; ++si)
-      if (name[si]!=' ' && name[si]!='-')
-        moveLabel[di++] = name[si];
-  }
-  moveLabel[di] = 0;
+  return MV_OTHER;
 }
-#else
-#define MOVE_NAME_LEN(n) ((unsigned char)strlen(state.validMoves[n].name))
-#endif
+
+/* Offset of the trailing amount within a name, or 0 if it carries none. */
+static unsigned char amountAt(const char *n) {
+  static unsigned char p, sp;
+  sp = 0;
+  for (p = 0; n[p]; p++)
+    if (n[p] == ' ')
+      sp = p;
+  if (sp && n[sp + 1] >= '0' && n[sp + 1] <= '9')
+    return (unsigned char)(sp + 1);
+  return 0;
+}
+
+/* Clamped so the menu can never reach the clock's columns. */
+static unsigned char emit(const char *s, unsigned char len) {
+  if ((unsigned char)(menuX + len) > (unsigned char)(menuEnd + 1))
+    len = (menuX > menuEnd) ? 0 : (unsigned char)(menuEnd + 1 - menuX);
+  if (len) {
+    memcpy(tempBuffer, s, len);
+    tempBuffer[len] = 0;
+    drawStatusTextAt(menuX, tempBuffer);
+  }
+  menuX = (unsigned char)(menuX + len);
+  return len;
+}
+
+static void addStop(unsigned char col, unsigned char len, unsigned char ref) {
+  moveLoc[stopCount] = col;
+  moveLen[stopCount] = len;
+  moveRef[stopCount] = ref;
+  stopCount++;
+}
+
+/* The raise while its half is selected, otherwise the call. */
+void drawMoveNumber() {
+  static unsigned char src, a, n;
+  if (!numWidth)
+    return;
+  src = (raiseStop != 255 && cursorX == raiseStop) ? raiseIdx[raiseSel] : callRef;
+  a = amountAt(state.validMoves[src].name);
+  n = 0;
+  if (a)
+    while (state.validMoves[src].name[a + n]) {
+      tempBuffer[n] = state.validMoves[src].name[a + n];
+      n++;
+    }
+  while (n < numWidth)
+    tempBuffer[n++] = ' ';
+  tempBuffer[n] = 0;
+  drawStatusTextAt(numCol, tempBuffer);
+}
+
+void layoutMoveMenu() {
+  static unsigned char i, n, gap, fold, allin, start, tot;
+  static unsigned char cls[5], vlen[5], amt[5];
+
+  menuEnd = (unsigned char)(WIDTH - 5 - STATUS_TIMER_WIDTH);
+  stopCount = 0;
+  raiseStop = 255;
+  raiseCount = 0;
+  raiseSel = 0;
+  numWidth = 0;
+  callRef = 255;
+  fold = 255;
+  allin = 255;
+  menuX = PLAYER_MOVE_START_X;
+
+  for (i = 0; i < state.validMoveCount; i++) {
+    cls[i] = moveClass(state.validMoves[i].name);
+    amt[i] = amountAt(state.validMoves[i].name);
+    n = (unsigned char)strlen(state.validMoves[i].name);
+    vlen[i] = amt[i] ? (unsigned char)(amt[i] - 1) : n;
+    if (cls[i] == MV_FOLD) {
+      if (fold == 255) fold = i;
+    } else if (cls[i] == MV_CALL) {
+      if (callRef == 255) callRef = i;
+      if (amt[i] && (unsigned char)(n - amt[i]) > numWidth)
+        numWidth = (unsigned char)(n - amt[i]);
+    } else if (cls[i] == MV_RAISE) {
+      raiseIdx[raiseCount++] = i;
+      if (amt[i] && (unsigned char)(n - amt[i]) > numWidth)
+        numWidth = (unsigned char)(n - amt[i]);
+    } else if (cls[i] == MV_ALLIN) {
+      if (allin == 255) allin = i;
+    }
+  }
+
+  /* Nothing to fold together: one entry per move, still clamped. */
+  if (callRef == 255 || !raiseCount) {
+    numWidth = 0;
+    for (i = 0; i < state.validMoveCount; i++) {
+      start = menuX;
+      n = emit(state.validMoves[i].name,
+               (unsigned char)strlen(state.validMoves[i].name));
+      addStop(start, n, i);
+      menuX = (unsigned char)(menuX + 2);
+    }
+    return;
+  }
+
+  tot = (unsigned char)(PLAYER_MOVE_START_X + vlen[callRef] + 1
+                        + vlen[raiseIdx[0]] + numWidth);
+  gap = 2;
+  n = 2;
+  if (fold != 255) n++;
+  if (allin != 255) { n++; tot = (unsigned char)(tot + vlen[allin]); }
+  if (fold != 255) tot = (unsigned char)(tot + vlen[fold]);
+  if ((unsigned char)(tot + 2 * (n - 1) - 1) > menuEnd)
+    gap = 1;
+
+  if (fold != 255) {
+    start = menuX;
+    n = emit(state.validMoves[fold].name, vlen[fold]);
+    addStop(start, n, fold);
+    menuX = (unsigned char)(menuX + gap);
+  }
+
+  start = menuX;
+  n = emit(state.validMoves[callRef].name, vlen[callRef]);
+  addStop(start, n, callRef);
+
+  emit("/", 1);
+
+  start = menuX;
+  n = emit(state.validMoves[raiseIdx[0]].name, vlen[raiseIdx[0]]);
+  raiseStop = stopCount;
+  addStop(start, n, raiseIdx[0]);
+  menuX = (unsigned char)(menuX + gap);
+
+  numCol = menuX;
+  if ((unsigned char)(numCol + numWidth) > (unsigned char)(menuEnd + 1))
+    numWidth = (numCol > menuEnd) ? 0 : (unsigned char)(menuEnd + 1 - numCol);
+  menuX = (unsigned char)(menuX + numWidth);
+
+  if (allin != 255) {
+    menuX = (unsigned char)(menuX + gap);
+    start = menuX;
+    n = emit(state.validMoves[allin].name, vlen[allin]);
+    addStop(start, n, allin);
+  }
+}
+
 
 void requestPlayerMove() {
   requestedMove=NULL;
@@ -553,24 +720,13 @@ void requestPlayerMove() {
   if (state.viewing || state.activePlayer != 0)
     return;
 
-  // Default move cursor to second position (1) if possible
-  cursorX = state.validMoveCount>1;
-
   // Draw the moves on the status bar
   clearStatusBar();
-  x=PLAYER_MOVE_START_X;
-  for (i=0;i<state.validMoveCount;i++) {
-    moveLoc[i] = x;
-#if WIDTH<40
-    compactMoveName(state.validMoves[i].name);
-    moveLen[i] = (unsigned char)strlen(moveLabel);
-    drawStatusTextAt(x, moveLabel);
-    x += 1 + moveLen[i];
-#else
-    drawStatusTextAt(x, state.validMoves[i].name);
-    x += 2 + (unsigned char)strlen(state.validMoves[i].name);
-#endif
-  }
+  layoutMoveMenu();
+
+  // The shared amount depends on where the cursor lands, so paint it after
+  cursorX = stopCount > 1;
+  drawMoveNumber();
 
   // Prepare the countdown timer
   moveTimeLeft = state.moveTime;
@@ -580,7 +736,7 @@ void requestPlayerMove() {
   disableDoubleBuffer();
 
   // Zoom in the cursor
-  i=MOVE_NAME_LEN(cursorX);
+  i=moveLen[cursorX];
   h=moveLoc[cursorX];
 
  
@@ -629,17 +785,33 @@ void requestPlayerMove() {
 
     if (inputDirX !=0 ) {
       cursorX+=inputDirX;
-      if (cursorX<state.validMoveCount) {
-        //drawStatusTextAt(moveLoc[cursorX-inputDirX]-1, " ");
-        //drawStatusTextAt(moveLoc[cursorX]-1, "+");
-
-        hideLine(moveLoc[cursorX-inputDirX],HEIGHT-1,MOVE_NAME_LEN(cursorX-inputDirX));
-        drawLine(moveLoc[cursorX],HEIGHT-1,MOVE_NAME_LEN(cursorX));
+      if (cursorX<stopCount) {
+        hideLine(moveLoc[cursorX-inputDirX],HEIGHT-1,moveLen[cursorX-inputDirX]);
+        drawLine(moveLoc[cursorX],HEIGHT-1,moveLen[cursorX]);
+        drawMoveNumber();
 
         soundCursor();
 
       } else {
         cursorX-=inputDirX;
+
+        soundCursorInvalid();
+
+      }
+      getTime();
+    }
+
+    // Up is -1, and picks the larger raise
+    if (inputDirY != 0) {
+      if (raiseStop != 255 && cursorX == raiseStop &&
+          (unsigned char)(raiseSel - inputDirY) < raiseCount) {
+        raiseSel = (unsigned char)(raiseSel - inputDirY);
+        moveRef[raiseStop] = raiseIdx[raiseSel];
+        drawMoveNumber();
+
+        soundCursor();
+
+      } else {
 
         soundCursorInvalid();
 
@@ -660,14 +832,12 @@ void requestPlayerMove() {
 
   // Request the highlighted move
   if (cursorX<255) {
-    requestedMove = state.validMoves[cursorX].move;
+    requestedMove = state.validMoves[moveRef[cursorX]].move;
     clearStatusBar();
-#if WIDTH<40
-    compactMoveName(state.validMoves[cursorX].name);
-    drawStatusTextAt(moveLoc[cursorX], moveLabel);
-#else
-    drawStatusTextAt(moveLoc[cursorX], state.validMoves[cursorX].name);
-#endif
+    menuX = moveLoc[cursorX];
+    menuEnd = (unsigned char)(WIDTH - 1);
+    emit(state.validMoves[moveRef[cursorX]].name,
+         (unsigned char)strlen(state.validMoves[moveRef[cursorX]].name));
     drawBuffer();
 
     soundSelectMove();

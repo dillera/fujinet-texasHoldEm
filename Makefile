@@ -93,6 +93,10 @@ else
   # CoCo 1/2 hires screen lives at $6000 (src/coco/hires.h). cmoc's
   # default org of $2800 would place code/data straight through it, so
   # the program corrupts itself the moment the screen is cleared.
+  # The screen CANNOT be moved up to reclaim $7800-$7FFF: tried on
+  # 2026-09-02 with the stack relocated via --initial-s, and it still
+  # crashed on boot - Disk Basic keeps its own workspace at the top of
+  # RAM and the DriveWire path the game uses depends on it.
   LDFLAGS_EXTRA_COCO += --org=1000 --limit=6000
   COCO_CHARSET_SRC := support/coco/pmode3.fnt
 endif

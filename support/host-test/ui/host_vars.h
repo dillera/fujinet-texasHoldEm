@@ -10,19 +10,51 @@
 char *itoa(int value, char *str, int base);
 
 #ifdef HOST_ADAM
+/* Adam: 32x24, mirrors src/adam/vars.h */
 #define WIDTH 32
 #define HEIGHT 24
 #define SINGLE_BUFFER_MODE 1
-#elif defined(HOST_COCO3)
+#define PLAYER_MOVE_START_X 0
+#define STATUS_TIMER_WIDTH 0
+#elif defined(HOST_COCO32)
+/* CoCo 1/2: 32-column hires layout */
+#define WIDTH 32
+#define HEIGHT 24
+#define SINGLE_BUFFER_MODE 1
+#define PLAYER_MOVE_START_X 0
+#define LEFT_JUSTIFY_PLAYER_PURSE 99
+#define STATUS_TIMER_WIDTH 1
+#else
 #define WIDTH 40
+#ifdef HOST_COCO3
 #define HEIGHT 24
 #define SINGLE_BUFFER_MODE 1
 #else
-#define WIDTH 40
 #define HEIGHT 25
+#endif
+/* matches the default in gamelogic.c; the menu test needs it too */
+#define STATUS_TIMER_WIDTH 2
 #endif
 #define QUERY_SUFFIX ""
 #define POT_Y_MODIFIER 3
+
+/* mirrors gamelogic.c so the seat-overlap check measures the real field */
+#if WIDTH >= 40
+#define MOVE_FIELD_W 5
+#else
+#define MOVE_FIELD_W 4
+#endif
+
+/* mirrors the default in gamelogic.c so the menu test can locate the entries */
+#ifndef PLAYER_MOVE_START_X
+#define PLAYER_MOVE_START_X 1
+#endif
+
+/* drawPot() boxes the total at drawBox(WIDTH/2-3, ...), whose frame corners
+   land here; the border must survive whatever the seats draw nearby. */
+#define POT_BOX_X (WIDTH / 2 - 5)
+#define POT_BOX_TOP_Y (11 + POT_Y_MODIFIER)
+#define POT_BOX_BOTTOM_Y (POT_BOX_TOP_Y + 2)
 
 #define KEY_LEFT_ARROW 1
 #define KEY_RIGHT_ARROW 2

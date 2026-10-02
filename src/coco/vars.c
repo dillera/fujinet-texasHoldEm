@@ -5,22 +5,23 @@
 // Screen specific player/bet coordinates
 // Texas Hold'em: the community board occupies the table center (rows 9-13),
 // so the middle-row seats place their bets under their own cards instead of
-// toward the center, and bottom bets sit clear of the pot line (row 15)
+// toward the center, and the bottom seat sits right of the pot box, which
+// drawPot() frames across rows 14-16
 #ifndef COCO3
 unsigned char playerXMaster[] = { 11,0, 0, 0, 11, 30,30, 30 };
 unsigned char playerYMaster[] = { 18, 18,10,2, 2, 2,10,18 };
 
 char playerDirMaster[] = { 1,1,1,1,1,-1,-1,-1 };
-char playerBetXMaster[] = { 3,10,1,10,3,-8,-1,-8 };
-char playerBetYMaster[] = { -3, -3, 3,4,4,4,3,-3 };
+char playerBetXMaster[] = { 8,6,5,6,3,-6,-4,-3 };
+char playerBetYMaster[] = { -3, -3, 3,5,5,5,3,-3 };
 
 #else /* CoCo 3*/
 unsigned char playerXMaster[] = { 17,1, 1, 1, 16, 37,37, 37 };
 unsigned char playerYMaster[] = { 18, 18,10,2, 2, 2,10,18 };
 
 char playerDirMaster[] = { 1,1,1,1,1,-1,-1,-1 };
-char playerBetXMaster[] = { 1,10,8,10,3,-8,-3,-8 };
-char playerBetYMaster[] = { -2, -2, 1,5,5,5,1,-2 };
+char playerBetXMaster[] = { 7,10,8,10,3,-8,-3,-4 };
+char playerBetYMaster[] = { -2, -2, 1,5,5,5,1,-3 };
 
 #endif
 

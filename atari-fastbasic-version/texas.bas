@@ -103,11 +103,16 @@ dim charBuffer(1023) BYTE
 ' **************************************************
 
 ' State related variables
-dim validMoveCount, playerCount, currentCard, xOffset, requestedMove$, previousPot, playerJustMoved, prevPlayerCount
+dim validMoveCount, playerCount, currentCard, xOffset, requestedMove$, prevPlayerCount
 
 ' Other varibles
 DIM Screen,__print_inverse, move_color, __print_reverse, noAnim, cursorY, cursorX, errorCount
 dim move_loc(7), move_bits(7) BYTE
+' One cursor stop per selectable move. Call and raise share a label, so a stop
+' is not the same thing as a validMove entry: stop_ref maps back to one.
+dim stop_len(7) BYTE, stop_ref(7) BYTE, raise_ix(4) BYTE
+dim stopCount, raiseCount, raiseSel, raiseStop, callRef, foldRef, allinRef
+dim numCol, numWidth, amountAt, inputVert, curStop, prevInputVert, result$
 
 ' DLI Colors 
 data background_color()B.=$0,0,0
@@ -572,17 +577,6 @@ PROC DrawCard text _col _row
    elif suit=$53 : suit = $46 ' Spade
    endif
 
-  ' Check if a card exists underneath to the right. This will adjust some chars being drawn
-  rightUnder =  peek(loc+42)>0
-
-  if rightUnder 
-    topBottomOffset=-4
-    ' Draw left top and bottom corners
-    poke loc-1, 75
-    poke loc+159, 76
-    suit=suit+32
-  endif
-
   ' Draw Top of card
   dpoke loc, 256*($52+topBottomOffset )+ ($51+topBottomOffset)
   
@@ -590,14 +584,13 @@ PROC DrawCard text _col _row
   if val<>$3C
 
     ' Draw Value of card followed by blank space or second "10" character if  value is 10 (or 128+10 for red suits)
-    ' If there is a card underneath to the right, adjust char
     isTen = val=10 or val=138
-    val = val+(1+val*isTen + rightUnder*(61-9*isTen))*256 
+    val = val+(1+val*isTen)*256
     
     dpoke loc+40, val
 
     ' Draw Middle white
-    dpoke loc+80, $0101 + (rightUnder*$3D*256)
+    dpoke loc+80, $0101
 
     ' Draw Suit of card
     dpoke loc+120, suit*257+256
@@ -613,19 +606,18 @@ PROC DrawCard text _col _row
     ' Left edge 
     val = peek(locSide)
       
-    ' Check if overlaying on top of existing card
-    if   val=$3C or val=$BC : inc val ' Card back
+    ' Merge with whatever this card overlaps
+    if   val=$3C or val=$BC : inc val ' Card back - split the pair with an edge
     elif val=1  : val= 62 ' White space
     elif (val>64 and val<72) or (val>191 and val<201) : val=val+32: poke locSide-1, peek(locSide-1)+32 ' Suit
     elif val=11 or val=139 : val=val+52 ' 10 
-    elif rightUnder : val=72
     else : val=73 ' Default left edge
     endif
 
     poke locSide, val
     
-    ' Right edge - draw only if empty
-    if not rightUnder then poke locSide+3, 74
+    ' Right edge - the next card overwrites it if one follows
+    poke locSide+3, 74
     
   next locSide
 
@@ -660,15 +652,18 @@ Proc GetCommonInput __dirAdr __triggerAdr __keyPress
   ' Set trigger pressed
   __valT = __val=32 or __val=$9B or not strig(0)
   
-  ' Set directional based on arrow keys
-  __valD = (__val=31 or __val=42 or __val=61 or __val=29)-(__val=28 or __val=30 or __val=43 or __val=45)
+  ' Horizontal and vertical are kept apart: the move menu pairs call with
+  ' raise on one label, so left/right picks the half and up/down the amount.
+  __valD    = (__val=31 or __val=42)-(__val=30 or __val=43)
+  inputVert = (__val=29 or __val=61)-(__val=28 or __val=45)
 
   ' If directional key not pressed, check joystick 
-  if not  __valD
+  if not __valD and not inputVert
     __val = stick(0)
     
-    ' Get left or right direction. Use "AND 4" and "AND 8" to so diagnal movement works as well for left/right
-    __valD = (not __val&8) - (not __val&4)
+    ' "AND" each bit separately so diagonals still register on both axes
+    __valD    = (not __val&8) - (not __val&4)
+    inputVert = (not __val&2) - (not __val&1)
   endif
   
   ' Update the value addresses passed in
@@ -799,6 +794,10 @@ PROC ViewHowToPlay
   inc y:@PrintAt 3,y, &"         STAY IN THE HAND"
   inc y:@PrintAt 3,y, &"ALL-IN x BET ALL YOUR CHIPS"
 
+  INC Y
+  inc y:@PrintAt 3,y, &"LEFT/RIGHT PICKS THE MOVE"
+  inc y:@PrintAt 3,y, &"UP/DOWN SETS THE AMOUNT"
+
   @DrawBuffer
   @PrintAt 7,25, &"PRESS ANY KEY TO CONTINUE"
 
@@ -878,7 +877,7 @@ PROC SelectTable
   
           ' Update Index Position
           @PrintAt 3, 9+index*2, &" "
-          index = index + inputDir
+          index = index + inputDir + inputVert
           if index <0 : index= playerCount-1 :elif index>= playerCount: index=0 : endif
           @PrintAt 3, 9+index*2, &"o"$EF[chipColor+1,1]
           @DrawBuffer
@@ -1045,13 +1044,14 @@ PROC RenderPot
     @POS 8,15:@Print &"PRE-FLOPFLOP    TURN    RIVER   SHOWDOWN"[(round-1)*8+1,8]
   endif
 
-  ' Pot border (below the community card board)
-  @POS 17,14:@PrintInv &";@@@@<"
-  @POS 17,15:@PrintInv &"?o   ?"
-  @POS 17,16:@PrintInv &"=@@@@>"
+  ' Pot border, one column wider than 5 Card Stud's: its interior held the
+  ' chip and only three digits, so a four figure pot wrote over the frame
+  @POS 16,14:@PrintInv &";@@@@@<"
+  @POS 16,15:@PrintInv &"?o    ?"
+  @POS 16,16:@PrintInv &"=@@@@@>"
 
-  ' Pot total
-  @POS 20-1*(pot>99),15:@PrintVal pot
+  ' Pot total, padded so a shrinking pot leaves no stale digit
+  @POS 18,15:@PrintValSpace pot, 4
 
 ENDPROC
 
@@ -1092,15 +1092,16 @@ ENDPROC
 
 PROC RenderGameStatus
   if activePlayer = 0 then exit
-  'round=5
-  'activePlayer=-1
-  'lastResult$="some result winner, queens and sixes"
   @pos 0,25
   if activePlayer>0
     @Print &"WAITING ON "
     @PrintUpper &player_name$(activePlayer)
 
   elif activePlayer< 0 and (round = 5 or round = 0)
+
+    ' Never cut lastResult$ itself: truncating it made every later repaint
+    ' skip the split and strand the upper row on screen
+    result$ = lastResult$
 
     ' End of (or in between) games
      if round=5 and prevRound <> round 
@@ -1119,14 +1120,14 @@ PROC RenderGameStatus
           i=i-text
           @PrintUpper &lastResult$[1,i]
           @PrintSpaceRest
-          lastResult$=lastResult$[i+2]
+          result$ = lastResult$[i+2]
           @pos 0,25
           exit
         endif
       NEXT
     endif
 
-    @PrintUpper &lastResult$
+    @PrintUpper &result$
     
     if round=5 and prevRound <> round 
       sound 1,150,10,8:pause 2
@@ -1281,7 +1282,12 @@ PROC RenderCards
       if len(player_hand$(i))>j
         hand$=player_hand$(i)[j,2]
         if doAnim then sound 1,0,0,1
-        @DrawCard &hand$, playerX(i)+(j-1)*playerDir(i), playerY(i)
+        ' Right hand seats deal leftwards, so swap the pair's slots and let
+        ' the rightmost card go down last. Cards then always overlap the same
+        ' way round and a lone folded card still sits on the seat anchor.
+        k = j-1
+        if playerDir(i)<0 and len(player_hand$(i))>3 then k = 2-k
+        @DrawCard &hand$, playerX(i)+k*playerDir(i), playerY(i)
 
         if doAnim
           @DrawBuffer
@@ -1319,10 +1325,6 @@ PROC RenderCards
   noAnim=0
 ENDPROC
 
-PROC ClearCursor
-  mset pm.2+cursorY,2,0
-ENDPROC
-
 PROC MoveHighlightToLocation __x __y __len __lineStyle
   mset pm.2,256,0
   bit=128:total=0
@@ -1352,6 +1354,66 @@ PROC MoveHighlightToLocation __x __y __len __lineStyle
   until x=cursorX and y=cursorY
 endproc
 
+' Position of the trailing amount in a move name, or 0 if it carries none.
+' Strings are length prefixed, so character n lives at address+n.
+PROC FindAmount text
+  amountAt=0
+  __a=peek(text)
+  while __a>1
+    if peek(text+__a)=32
+      __c=peek(text+__a+1)
+      if __c>=48 and __c<=57 then amountAt=__a+1
+      exit
+    endif
+    dec __a
+  wend
+ENDPROC
+
+
+' Repaint the shared amount: the raise while its half is selected, else the call
+PROC DrawMoveAmount
+  if not numWidth then exit
+  __m = callRef
+  if raiseStop>=0
+    if raiseStop=curStop then __m = raise_ix(raiseSel)
+  endif
+  @FindAmount &validMove$(__m)
+  temp$=""
+  if amountAt then temp$ = validMove$(__m)[amountAt, len(validMove$(__m))-amountAt+1]
+  while len(temp$)<numWidth : temp$ =+ " " : wend
+  @POS numCol,25
+  @Print &temp$
+ENDPROC
+
+
+' Record a cursor stop: where its highlight sits, how wide, and which
+' validMove entry it sends. move_loc is an offset from column 1.
+PROC AddStop __col __len __ref
+  move_loc(stopCount) = __col-1
+  stop_len(stopCount) = __len
+  stop_ref(stopCount) = __ref
+  __b=128:__t=0
+  for __j=1 to __len
+    __t = __t + __b
+    __b=__b/2
+  next
+  move_bits(stopCount) = __t
+  inc stopCount
+ENDPROC
+
+
+' Print a move's name with any trailing amount removed, and record the stop
+PROC PrintVerb __ref
+  @FindAmount &validMove$(__ref)
+  __v = len(validMove$(__ref))
+  if amountAt then __v = amountAt-2
+  temp$ = validMove$(__ref)[1,__v]
+  @POS x,25:@Print &temp$
+  @AddStop x, __v, __ref
+  x = x + __v
+ENDPROC
+
+
 PROC WaitOnPlayerMove
   
   if viewing or activePlayer <> 0 then exit
@@ -1361,29 +1423,71 @@ PROC WaitOnPlayerMove
 
   text_color(2) = $0
 
-  ' Draw the moves and store the locations and player bits
-  
-  @POS 1,25
-  x=0
+
+  ' The server's five moves will not fit beside the countdown clock, so call
+  ' and raise share one label and one amount. Display only: each stop still
+  ' sends its own move code.
+  foldRef=-1:callRef=-1:allinRef=-1:raiseCount=0
+  numWidth=0:stopCount=0:raiseStop=-1:raiseSel=0
 
   for i=0 to validMoveCount-1
-    move_loc(i) = x
-    @Print &validMove$(i)
-    @Print &"  "
-    x = x + len(validMove$(i))+2
+    c=peek(&validMove$(i)+1)
+    if c=70                                  ' FOLD
+      if foldRef<0 then foldRef=i
+    elif c=67                                ' CALL or CHECK
+      if callRef<0 then callRef=i
+    elif c=82 or c=66                        ' RAISE or BET
+      raise_ix(raiseCount)=i:inc raiseCount
+    elif c=65                                ' ALL IN
+      if allinRef<0 then allinRef=i
+    endif
+  next
 
-    bit=128:total=0
-    for j=1 to len(validMove$(i))
-      total = total + bit
-      bit=bit/2
-    next 
-    move_bits(i)=total    
-  next 
+  x=1
+
+  if callRef<0 or raiseCount=0
+    ' Nothing to fold together: one entry per move
+    for i=0 to validMoveCount-1
+      @POS x,25:@Print &validMove$(i)
+      @AddStop x, len(validMove$(i)), i
+      x = x + len(validMove$(i))+2
+    next
+  else
+    ' The shared field is as wide as the widest amount on offer, so nothing
+    ' to its right shifts when the amount changes
+    @FindAmount &validMove$(callRef)
+    if amountAt then numWidth = len(validMove$(callRef))-amountAt+1
+    for i=0 to raiseCount-1
+      @FindAmount &validMove$(raise_ix(i))
+      if amountAt
+        j = len(validMove$(raise_ix(i)))-amountAt+1
+        if j>numWidth then numWidth=j
+      endif
+    next
+
+    if foldRef>=0
+      @PrintVerb foldRef
+      x = x + 2
+    endif
+
+    @PrintVerb callRef
+    @POS x,25:@Print &"/"
+    inc x
+    raiseStop = stopCount
+    @PrintVerb raise_ix(0)
+    x = x + 2
+
+    numCol = x
+    x = x + numWidth + 2
+
+    if allinRef>=0 then @PrintVerb allinRef
+  endif
 
   ' Setup move player line indicator
-  move = validMoveCount>1
-  x = 52+4*move_loc(move)
-  @MoveHighlightToLocation x, 232, len(validMove$(move)), 1
+  curStop = stopCount>1
+  @DrawMoveAmount
+  x = 52+4*move_loc(curStop)
+  @MoveHighlightToLocation x, 232, stop_len(curStop), 1
   x=cursorX
 
  ' Fade in moves and play ding-ding sound
@@ -1412,7 +1516,7 @@ PROC WaitOnPlayerMove
   maxJifs = jifsPerSec*moveTime
   jifCount = 0
   
-  prevInputDir=0:inputDir=0:inputTrigger=0
+  prevInputDir=0:inputDir=0:inputTrigger=0:prevInputVert=0:inputVert=0
   repeat
 
     ' Update time countdown timer once per second
@@ -1456,22 +1560,42 @@ PROC WaitOnPlayerMove
     ' If moved input left or right
     if prevInputDir = 0 and inputDir
       
-      move = move + inputDir
+      curStop = curStop + inputDir
 
       ' Check if in bounds of move counts
-      if move <0 or move >= validMoveCount 
+      if curStop <0 or curStop >= stopCount 
         ' At edge. Show bump animation
-        move = move - inputDir
+        curStop = curStop - inputDir
         PMHPOS 2,x+inputDir
         sound 1,255,10,8:pause 2:sound
         PMHPOS 2,x
       else
         ' Can move
         sound 1,100,10,8
-        mset pm.2+cursorY,3,move_bits(move)
-        cursorX = 52+4*move_loc(move)
+        mset pm.2+cursorY,3,move_bits(curStop)
+        cursorX = 52+4*move_loc(curStop)
+        @DrawMoveAmount
       endif
     endif
+
+    ' Up and down cycle the raise amounts while the raise half is selected.
+    ' Up is -1, and picks the larger raise.
+    if prevInputVert = 0 and inputVert
+      if raiseStop>=0
+        if raiseStop=curStop
+          j = raiseSel - inputVert
+          if j>=0 and j<raiseCount
+            raiseSel = j
+            stop_ref(raiseStop) = raise_ix(raiseSel)
+            @DrawMoveAmount
+            sound 1,100,10,8:pause 2:sound
+          else
+            sound 1,255,10,8:pause 2:sound
+          endif
+        endif
+      endif
+    endif
+    prevInputVert = inputVert
 
     ' Store inputDir location so we know whenever the player changes direction
     prevInputDir = inputDir
@@ -1483,9 +1607,15 @@ PROC WaitOnPlayerMove
   ' Clear the other moves 
   sound 1,100,10,8
   pause
-  mset screen+40*25+1, move_loc(move),0
-  mset screen+40*25+1+ move_loc(move)+len(validMove$(move))+1,40,0
-  requestedMove$ = validMoveCode$(move)
+  mset screen+40*25+1, move_loc(curStop),0
+  mset screen+40*25+1+ move_loc(curStop)+stop_len(curStop),40,0
+
+  ' Reprint the choice in full: the menu splits the amount into a shared
+  ' field, but the confirmation should say what was actually committed
+  @POS move_loc(curStop)+1, 25
+  @Print &validMove$(stop_ref(curStop))
+
+  requestedMove$ = validMoveCode$(stop_ref(curStop))
   text_color(2) = move_color
   
   sound 1,80,10,8:pause 2:
@@ -1549,7 +1679,6 @@ proc AskToLeave
       @ProgressAnim 18,13
       
       query$=""
-     ' if k=81 then @QuitGame
       exit
     endif
 
@@ -1557,7 +1686,6 @@ proc AskToLeave
     if k=27 then exit
   loop
 
-  '@ResetScreenBuffered
 endproc
 
 proc ProgressAnim x y
