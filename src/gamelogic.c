@@ -71,7 +71,7 @@ void drawStreetLabel() {
   };
   if (state.round > 5 || state.playerCount < 2)
     return;
-#ifdef BUILD_COLECO
+#if defined(BUILD_COLECO) || defined(BUILD_NES)
   // The shared spot (WIDTH/2-13 == column 3) sits on the left seat's cards on
   // a 32-column table, and the pot now lives below the board. Row 8 is the
   // clear gap between the top seats (cards end row 7) and the board (row 9).

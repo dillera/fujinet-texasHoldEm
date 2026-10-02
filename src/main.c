@@ -101,7 +101,7 @@ void main(void)
 
     // Get latest state and draw on screen, then prompt player for move if their turn
     if (getStateFromServer()) {
-#ifdef BUILD_COLECO
+#if defined(BUILD_COLECO) || defined(BUILD_NES)
       /*
         The ColecoVision has no back buffer (1K of RAM), so showGameScreen()
         repaints the table straight to VRAM. Every server poll would otherwise
@@ -115,6 +115,10 @@ void main(void)
         sum is enough: a rare collision just defers a repaint to the next
         differing poll. requestPlayerMove() still runs, so our own turn (where
         the countdown does change the state every second) always draws.
+
+        The NES draws through cc65's vblank ring buffer, a few dozen tiles a
+        frame, so an unchanged repaint there costs a backlog the next real
+        change has to queue behind. Its state is an ordinary object in WRAM.
       */
       {
         static unsigned int lastDrawnSum = 1; // != any first real sum

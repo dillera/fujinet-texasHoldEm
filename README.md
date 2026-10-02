@@ -21,6 +21,8 @@ client-side poker rules.
 | MS-DOS | 🔨 builds, untested | `./make-exp msdos` | `r2r/msdos/texas.exe` + `texas.img` |
 | Coleco Adam | 🔨 builds, untested | `./make-exp adam` (needs z88dk) | `r2r/adam/texas.ddp` |
 | Intellivision | ✅ playable | `cd intv && make` | `intv/texas.rom` (jzIntv) + `texas.bin`/`.cfg` (SD via PiRTO II) |
+| ColecoVision | ✅ playable (MAME) | `make FUJINET_LIB=<fujinet-lib-experimental dir> PLATFORMS=coleco coleco` | `r2r/coleco/texas.rom` (32K FujiNet cart) |
+| NES | ✅ playable (MAME) | `make FUJINET_LIB=<fujinet-lib-experimental dir> PLATFORMS=nes nes` | `r2r/nes/texas.nes` (NROM FujiNet cart) |
 | Bally Astrocade | ✅ playable | `cd astrocade && ./build.sh` | `astrocade/build/texas.bin` (8K FujiNet cart image) |
 | C64 | ⬜ not yet converted | — | — |
 
@@ -38,10 +40,11 @@ client-side poker rules.
   transitions (single-buffer platforms).
 * Rebranded logos/help; per-platform layout tuned so nothing overlaps the board.
 
-## C client (Apple II, CoCo, MS-DOS, Coleco Adam, C64)
+## C client (Apple II, CoCo, MS-DOS, Coleco Adam, ColecoVision, NES, C64)
 
 Shared core in `src/` + per-platform layer in `src/<platform>/`. Toolchains:
-cc65 (Apple II/C64), cmoc (CoCo), OpenWatcom v2 (MS-DOS), z88dk (Adam).
+cc65 (Apple II/C64/NES), cmoc (CoCo), OpenWatcom v2 (MS-DOS), z88dk
+(Adam/ColecoVision).
 
 ```bash
 make apple2         # needs cc65, Java + AppleCommander ac/acx CLIs
@@ -56,6 +59,15 @@ make coco-dist      # needs cmoc, lwasm, toolshed decb
 Adam card/frame tiles and the Namco font are generated from the MS-DOS CGA
 master art: `python3 support/tms9918/convert-tiles.py` regenerates
 `src/adam/font.bin` + `src/adam/udg.h` after any `src/msdos/charset.h` change.
+
+The ColecoVision and NES ports are side-ported from fujinet-5cardstud's and
+build against [fujinet-lib-experimental](https://github.com/FozzTexx/fujinet-lib-experimental)
+(its `coleco-target` / `add-nes` branches; pass the checkout as a directory).
+The NES has no per-cell colour, so `python3 src/nes/mkchr.py` bakes every
+glyph+colour pair from the ColecoVision font and card art (`src/coleco/font.bin`,
+`udg.h`) into NES tiles; rerun it after changing either. Headless MAME checks
+against a live fujinet-pc: `make coleco-smoke` / `make nes-smoke` (see the
+Makefile for `EXPECT=`/`SCRIPT=`), and `make nes-play` for a window.
 
 ## Atari client (FastBasic)
 
