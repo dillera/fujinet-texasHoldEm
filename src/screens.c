@@ -110,7 +110,11 @@ void showHelpScreen() {
 
   CLEAR_BUMP
 
+#ifdef BUILD_COLECO
+  centerStatusText("PRESS FIRE TO CONTINUE");
+#else
   centerStatusText("PRESS A KEY TO CONTINUE");
+#endif
 
   drawBuffer();
 
@@ -226,7 +230,12 @@ void showPlayerNameScreen() {
   i=(unsigned char)strlen(playerName);
 
   clearCommonInput();
+#ifdef USE_PLATFORM_NAME_ENTRY
+  // No keyboard on this platform: the name is typed on screen instead.
+  platformNameEntry(WIDTH/2-PLAYER_NAME_MAX/2, HEIGHT/2+3, PLAYER_NAME_MAX, playerName);
+#else
   while (!inputFieldCycle(WIDTH/2-PLAYER_NAME_MAX/2, HEIGHT/2+3, PLAYER_NAME_MAX, playerName)) ;
+#endif
 
   enableDoubleBuffer();
   for (y=HEIGHT/2;y<HEIGHT/2+5;++y)
@@ -342,8 +351,12 @@ void showTableSelectionScreen() {
     }
     
     //drawStatusText(" R+EFRESH  H+ELP  C+OLOR  S+OUND  Q+UIT");
-#if WIDTH>=40 
+#if WIDTH>=40
     drawStatusText("R-EFRESH   H-ELP  C-OLOR   N-AME   Q-UIT");
+#elif defined(BUILD_COLECO)
+    // Keypad, not letters: src/coleco/input.c maps 1-5 onto these shortcuts.
+    //             12345678901234567890123456789012
+    drawStatusText("1REFRSH 2HELP 3COLOR 4NAME 5QUIT");
 #else               //12345678901234567890123456789012
     drawStatusText("R-EFRESH   H-ELP   N-AME   Q-UIT");
 #endif
@@ -523,11 +536,18 @@ void showInGameMenuScreen() {
     y = HEIGHT/2-3;
 
     drawBox(x-3,y-2,22,9);
+#ifdef BUILD_COLECO
+    drawText(x,y,    "  5: QUIT TABLE");
+    drawText(x,y+=2, "  2: HOW TO PLAY");
+    drawText(x,y+=2, "  3: COLOR TOGGLE");
+    drawText(x,y+=2, "  *: KEEP PLAYING");
+#else
     drawText(x,y,    "  Q: QUIT TABLE");
     drawText(x,y+=2, "  H: HOW TO PLAY");
     drawText(x,y+=2, "  C: COLOR TOGGLE");
     //drawText(x,y+=2, "  S: SOUND TOGGLE");
     drawText(x,y+=2, "ESC: KEEP PLAYING");
+#endif
     drawBuffer();
 
     clearCommonInput();
