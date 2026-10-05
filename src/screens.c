@@ -116,13 +116,20 @@ void showHelpScreen() {
 
   CLEAR_BUMP
 
+#ifdef BUILD_COLECO
+  centerStatusText("PRESS FIRE TO CONTINUE");
+#elif defined(BUILD_NES)
+  centerStatusText("PRESS A TO CONTINUE");
+#else
   centerStatusText("PRESS A KEY TO CONTINUE");
+#endif
 
   drawBuffer();
 
   clearCommonInput();
 #ifdef USE_PLATFORM_SPECIFIC_INPUT
-  getPlatformKey();
+  // getPlatformKey() is non-blocking on these platforms
+  while (!getPlatformKey());
 #else
   cgetc();
 #endif
@@ -231,7 +238,12 @@ void showPlayerNameScreen() {
   i=(unsigned char)strlen(playerName);
 
   clearCommonInput();
+#ifdef USE_PLATFORM_NAME_ENTRY
+  // No keyboard on this platform: the name is typed on screen instead.
+  platformNameEntry(WIDTH/2-PLAYER_NAME_MAX/2, HEIGHT/2+3, PLAYER_NAME_MAX, playerName);
+#else
   while (!inputFieldCycle(WIDTH/2-PLAYER_NAME_MAX/2, HEIGHT/2+3, PLAYER_NAME_MAX, playerName)) ;
+#endif
 
   enableDoubleBuffer();
   for (y=HEIGHT/2;y<HEIGHT/2+5;++y)
@@ -347,8 +359,16 @@ void showTableSelectionScreen() {
     }
     
     //drawStatusText(" R+EFRESH  H+ELP  C+OLOR  S+OUND  Q+UIT");
-#if WIDTH>=40 
+#if WIDTH>=40
     drawStatusText("R-EFRESH   H-ELP  C-OLOR   N-AME   Q-UIT");
+#elif defined(BUILD_COLECO)
+    // Keypad, not letters: src/coleco/input.c maps 1-5 onto these shortcuts.
+    //             12345678901234567890123456789012
+    drawStatusText("1REFRSH 2HELP 3COLOR 4NAME 5QUIT");
+#elif defined(BUILD_NES)
+    // Buttons, not letters: src/nes/input.c maps them onto these shortcuts.
+    //             12345678901234567890123456789012
+    drawStatusText("A-JOIN  START-HELP  SELECT-NAME");
 #else               //12345678901234567890123456789012
     drawStatusText("R-EFRESH   H-ELP   N-AME   Q-UIT");
 #endif
@@ -528,11 +548,22 @@ void showInGameMenuScreen() {
     y = HEIGHT/2-3;
 
     drawBox(x-3,y-2,22,9);
+#ifdef BUILD_COLECO
+    drawText(x,y,    "  5: QUIT TABLE");
+    drawText(x,y+=2, "  2: HOW TO PLAY");
+    drawText(x,y+=2, "  3: COLOR TOGGLE");
+    drawText(x,y+=2, "  *: KEEP PLAYING");
+#elif defined(BUILD_NES)
+    drawText(x,y,    "SEL+START: QUIT TABLE");
+    drawText(x,y+=2, "START: HOW TO PLAY");
+    drawText(x,y+=2, "B: KEEP PLAYING");
+#else
     drawText(x,y,    "  Q: QUIT TABLE");
     drawText(x,y+=2, "  H: HOW TO PLAY");
     drawText(x,y+=2, "  C: COLOR TOGGLE");
     //drawText(x,y+=2, "  S: SOUND TOGGLE");
     drawText(x,y+=2, "ESC: KEEP PLAYING");
+#endif
     drawBuffer();
 
     clearCommonInput();

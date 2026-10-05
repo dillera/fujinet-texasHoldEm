@@ -64,10 +64,27 @@ void drawText(unsigned char x, unsigned char y, const char *s) {
   }
 }
 /* A card: 2 columns x 5 rows. Top/bottom edges '#', middle rows carry the
- * rank/suit or '?' for face-down. */
+ * rank/suit or '?' for face-down. Under HOST_ADAM the card is 3 columns
+ * wide and face-down draws replicate src/adam/graphics.c's clearing of the
+ * second hole card, so the 32x24 occupancy and fold collapse can be
+ * checked here. */
 void drawCard(unsigned char x, unsigned char y, unsigned char partial, const char *s, unsigned char isHidden) {
   unsigned char r;
   (void)partial;
+#ifdef HOST_ADAM
+  if (s[0] == '?') {
+    if (x > WIDTH - 3) {
+      for (r = 0; r < 5; r++) put(x - 2, y + r, ' ');
+      x--;
+    } else if (x + 4 >= WIDTH) {
+      /* right seat's second back: left-column sliver behind the first */
+      for (r = 0; r < 5; r++) put(x, y + r, r == 1 ? '?' : '#');
+      return;
+    } else {
+      for (r = 0; r < 5; r++) { put(x + 3, y + r, ' '); put(x + 4, y + r, ' '); }
+    }
+  }
+#endif
   for (r = 0; r < 5; r++) {
     char l = '#', rr = '#';
     if (r == 1) { l = isHidden ? '?' : s[0]; rr = isHidden ? '?' : s[1]; }
@@ -76,6 +93,9 @@ void drawCard(unsigned char x, unsigned char y, unsigned char partial, const cha
     if (rr >= 'a' && rr <= 'z') rr -= 32;
     put(x, y + r, l);
     put(x + 1, y + r, rr);
+#ifdef HOST_ADAM
+    put(x + 2, y + r, '#');
+#endif
   }
 }
 void drawChip(unsigned char x, unsigned char y) { put(x, y, 'o'); }

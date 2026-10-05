@@ -9,7 +9,14 @@
 /* not in the host libc */
 char *itoa(int value, char *str, int base);
 
-#ifdef HOST_COCO32
+#ifdef HOST_ADAM
+/* Adam: 32x24, mirrors src/adam/vars.h */
+#define WIDTH 32
+#define HEIGHT 24
+#define SINGLE_BUFFER_MODE 1
+#define PLAYER_MOVE_START_X 0
+#define STATUS_TIMER_WIDTH 0
+#elif defined(HOST_COCO32)
 /* CoCo 1/2: 32-column hires layout */
 #define WIDTH 32
 #define HEIGHT 24

@@ -99,7 +99,12 @@ static const char streetNames[12][10] = {
 void drawStreetLabel() {
   if (state.round > 5 || state.playerCount < 2)
     return;
-#if WIDTH >= 40
+#if defined(BUILD_COLECO) || defined(BUILD_NES)
+  // The shared spot sits on the left seat's cards on a 32-column table, and
+  // the pot now lives below the board. Row 8 is the clear gap between the top
+  // seats (cards end row 7) and the board (row 9).
+  drawText(WIDTH/2-4, 8, streetNames[state.round]);
+#elif WIDTH >= 40
   drawText(STREET_X, 12+POT_Y_MODIFIER, streetNames[state.round]);
 #else
   drawText(STREET_X, 12+POT_Y_MODIFIER,
@@ -331,16 +336,21 @@ void drawCards(bool finalFlip) {
 }
 
 void checkIfSpectatorStatusChanged() {
-  if (state.viewing == wasViewing)
+  // Held in a local rather than corrected in place: on the ColecoVision the
+  // state is the cartridge's reply window, which is ROM, so a store here would
+  // vanish and the correction below would never take (see src/misc.h).
+  unsigned char viewing = state.viewing;
+
+  if (viewing == wasViewing)
     return;
 
   // Temp hack due to server not always sending correct viewing flag when not full
   if (state.playerCount<8)
-    state.viewing=0;
+    viewing=0;
 
-  wasViewing = state.viewing;
+  wasViewing = viewing;
 
-  if (state.viewing) {
+  if (viewing) {
     drawStatusText("TABLE FULL: WATCHING AS A SPECTATOR");
     drawBuffer();
     pause(80);
@@ -414,10 +424,17 @@ void checkIfPlayerCountChanged() {
   }
 }
 
+// The move countdown, ticked down by the move-selection loop. It is a variable
+// of ours rather than state.moveTime -- the server's value only seeds it --
+// because on the ColecoVision the state is the cartridge's reply window, which
+// is ROM (see src/misc.h): counting down in place would go nowhere, and the
+// loop would never time out and auto-send the highlighted move.
+unsigned char moveTimeLeft;
+
 void drawStatusTimeLeft() {
   drawStatusTimer();
   tempBuffer[0]=' ';
-  itoa(state.moveTime, tempBuffer+1, 10);
+  itoa(moveTimeLeft, tempBuffer+1, 10);
   drawStatusTextAt( (unsigned char)(WIDTH-strlen(tempBuffer)-STATUS_TIMER_WIDTH), tempBuffer);
   drawBuffer();
 }
@@ -712,6 +729,7 @@ void requestPlayerMove() {
   drawMoveNumber();
 
   // Prepare the countdown timer
+  moveTimeLeft = state.moveTime;
   drawStatusTimeLeft();
 
   drawBuffer();
@@ -742,19 +760,20 @@ void requestPlayerMove() {
   maxJifs = 60;
   maxJifs *=state.moveTime;
   waitCount=0;
+  moveTimeLeft = state.moveTime;
   clearCommonInput();
   resetTimer();
 
   // Move selection loop
-  while (state.moveTime>0 && !inputTrigger) {
+  while (moveTimeLeft>0 && !inputTrigger) {
     waitvsync();
 
     // Tick counter once per second
     if (++waitCount>2) {
       waitCount=0;
       i = (unsigned char)((maxJifs-getTime())/60);
-      if (i!= state.moveTime) {
-        state.moveTime =i;
+      if (i!= moveTimeLeft) {
+        moveTimeLeft =i;
         drawStatusTimeLeft();
         soundTick();
 

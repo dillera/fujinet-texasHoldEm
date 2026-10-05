@@ -33,7 +33,14 @@ signed char playerBetX[8], playerBetY[8], playerDir[8];
 char *hand, *requestedMove;
 char prefs[4];
 
-#ifdef HOST_COCO32
+#ifdef HOST_ADAM
+/* Adam 32x24 master layout (mirror of src/adam/vars.c) */
+unsigned char playerXMaster[] = { 11, 0, 0, 0, 11, 30, 30, 30 };
+unsigned char playerYMaster[] = { 18, 18, 9, 2, 2, 2, 9, 18 };
+char playerDirMaster[] = { 1,1,1,1,1,-1,-1,-1 };
+char playerBetXMaster[] = { -3, 10, 1, 10, 3, -8, -1, -8 };
+char playerBetYMaster[] = { -3, -3, 4, 4, 4, 4, 4, -3 };
+#elif defined(HOST_COCO32)
 /* CoCo 1/2 master layout (mirror of src/coco/vars.c, non-COCO3 branch) */
 unsigned char playerXMaster[] = { 11,0, 0, 0, 11, 30,30, 30 };
 unsigned char playerYMaster[] = { 18, 18,10,2, 2, 2,10,18 };
@@ -274,6 +281,12 @@ int main(void) {
 
   frame("f5: flop, next poll (steady state)");
 
+  /* YOU bet on the flop - exercises the bottom-center bet position, which on
+   * 32-col platforms sits nearest the pot box. */
+  setPlayer(0, "you", 1, 25, "bet", 965, "askh");
+  state.activePlayer = 3;
+  frame("f6: you bet 25");
+
   /* The folded player's FOLD label must survive every frame.
    * mid-left seat: move field at x=playerX+betX=1+8=9, row=playerY+betY=11 */
 #if WIDTH >= 40
@@ -283,6 +296,25 @@ int main(void) {
 #if WIDTH >= 40
   /* mid-right seat move field: dir<0, x=37-3-5=29..33 */
   printf("mid-right field row11: \"%.10s\"\n", &screen[11][27]);
+#endif
+
+#ifdef HOST_ADAM
+  /* Community board: 3 cards at 2-col pitch from (11,9); rank row is 10. */
+  fails += expect(10, 11, "7DKCAC", "flop board at community row");
+  /* Street label on the pot row, left of the box. */
+  fails += expect(15, 0, "FLOP", "street label at (0,15)");
+  fails += expect(15, 14, "45", "pot amount inside the box");
+  /* YOU purse: x=11+1+6 right-justified by len(965), y=18-3+2. */
+  fails += expect(17, 15, "965", "YOU purse right of center");
+  /* YOU bet: left of the pot box (betX -3), clear of the box border. */
+  fails += expect(16, 9, "25", "YOU bet left of pot box");
+  fails += expect(16, POT_BOX_X, "+", "pot box corner intact");
+  /* Folded mid-left seat: the second hole card's leftover columns (3-4)
+   * must be blanked by drawCard's face-down clear. */
+  fails += expect(9, 3, "  ", "mid-left fold residue erased");
+  /* Live mid-right seat: second card's sliver at col 28 plus the first
+   * card at 29-31 - both hole cards must be visible. */
+  fails += expect(10, 28, "???", "right seat: both hole cards visible");
 #endif
 
   /* Five-handed pre-flop. The bottom seat's move/bet text sits directly under
