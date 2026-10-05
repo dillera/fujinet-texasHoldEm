@@ -24,6 +24,7 @@ client-side poker rules.
 | ColecoVision | ✅ playable (MAME) | `make FUJINET_LIB=<fujinet-lib-experimental dir> PLATFORMS=coleco coleco` | `r2r/coleco/texas.rom` (32K FujiNet cart) |
 | NES | ✅ playable (MAME) | `make FUJINET_LIB=<fujinet-lib-experimental dir> PLATFORMS=nes nes` | `r2r/nes/texas.nes` (NROM FujiNet cart) |
 | Bally Astrocade | ✅ playable | `cd astrocade && ./build.sh` | `astrocade/build/texas.bin` (8K FujiNet cart image) |
+| Palm OS | 🔨 builds | `cd palm && make` (palmdev Docker image) | `palm/build/Holdem.prc` |
 | C64 | ⬜ not yet converted | — | — |
 
 ## What changed from 5 Card Stud
@@ -131,6 +132,22 @@ the centre of the table with the street label above it and the pot moved onto
 the money row, and a move menu that squeezes server labels
 (`raise 15` -> `R15`) onto a 40-column status bar — Hold'em routinely offers
 five moves. See `astrocade/README.md` for the full list.
+
+## Palm OS client (C, prc-tools)
+
+`palm/` — standalone Palm OS 3.5+ client, "FN Texas Hold'em" (creator
+`ADTH`), brought over from [fujinet-palm](https://github.com/dillera/fujinet-palm).
+Talks to FujiNet over the FujiBus serial link and parses the `bin=1` state.
+`palm/common/` is a copy of fujinet-palm's shared FujiBus/network library.
+The m68k toolchain runs in Docker:
+
+```bash
+cd palm
+make image      # once: builds the palmdev toolchain image
+make            # build/Holdem.prc
+make test       # desktop test of the wire reader against saved server replies
+make cards      # regenerate cardart.h from this repo's Apple II + Lynx art
+```
 
 ## Testing against a local server
 

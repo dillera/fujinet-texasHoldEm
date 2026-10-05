@@ -62,3 +62,6 @@ build/
 r2r/
 obj/
 atari-fastbasic-version/texas.xex
+
+# Palm desktop test binary
+palm/tests/holdem_test
