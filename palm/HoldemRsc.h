@@ -6,6 +6,8 @@
 #define SetupRefreshButton   1005
 #define SetupSitButton       1006
 #define SetupStatusField     1007
+#define SetupLinkTrigger     1008
+#define SetupLinkList        1009
 
 #define TableForm            1100
 

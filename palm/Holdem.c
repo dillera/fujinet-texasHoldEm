@@ -11,6 +11,8 @@
  * The cards are the Apple II client's hi-res art, the small cards the Atari
  * Lynx client's sprites, both converted by tools/make_cards.py.
  */
+#include "fujinet-network.h"
+#include "fujinet-palmos.h"
 #include <PalmOS.h>
 
 #include "fnnet.h"
@@ -20,7 +22,7 @@
 
 #define CREATOR APP_CREATOR
 #define PREFS_ID 1
-#define PREFS_VERSION 1
+#define PREFS_VERSION 2
 
 #define DEFAULT_SERVER "https://th.carr-designs.com/"
 #define DEFAULT_TABLE  "ai2"
@@ -28,6 +30,11 @@
 #define URL_LEN 160
 
 #define NET_UNIT 1
+#define LINK_LEGACY 0
+#define LINK_USB 1
+#define LINK_BUILTIN 2
+#define LINK_SERIAL 3
+#define LINK_COUNT 4
 #define FIRST_STATUS_TICKS (SysTicksPerSecond() * 15)
 #define STALL_TICKS (SysTicksPerSecond() * 10)
 #define READ_POLL_TICKS (SysTicksPerSecond() / 20)
@@ -40,6 +47,7 @@
 #define heErrBadReply (appErrorClass | 0x11)
 #define heErrTooLong  (appErrorClass | 0x12)
 #define heErrNoTable  (appErrorClass | 0x13)
+#define heErrLink     (appErrorClass | 0x14)
 
 /* Posted once a form is drawn, to start its first fetch. */
 #define fetchEvent firstUserEvent
@@ -48,7 +56,18 @@ typedef struct {
     char name[HS_NAME_LEN];
     char table[HS_TABLE_ID_LEN];
     char server[SERVER_LEN];
+    UInt8 link;
 } HePrefs;
+
+typedef struct {
+    char name[HS_NAME_LEN];
+    char table[HS_TABLE_ID_LEN];
+    char server[SERVER_LEN];
+} HePrefsV1;
+
+static const char *const kLinkNames[LINK_COUNT] = {
+    "Legacy cradle", "USB Library", "BuiltIn SerLib", "Serial Library"
+};
 
 /* Screen layout of the table form. */
 #define SEAT_W 80
@@ -72,6 +91,8 @@ static HsTables gTables;
 static fn_u8 gReply[HS_STATE_MAX + 4];
 static char gUrl[URL_LEN];
 static char gStatus[48];
+static Int16 gOpenLink = -1;
+static UInt16 gLinkError;
 static WinHandle gOffscreen;
 
 static Boolean gSeated;         /* at the table form, polling */
@@ -89,13 +110,20 @@ typedef struct {
     UInt16 bits[CARD_H];
 } PicBitmap;
 static PicBitmap gPic;
+static Boolean HasNewSerialManager(void);
 
 /* ---- Errors ---------------------------------------------------------- */
 
 static void ErrorText(Err err, UInt8 ndevErr, char *out)
 {
     if (err == fnErrNoReply)
-        StrCopy(out, "No answer from FujiNet. Is the cradle cabled to it?");
+        StrCopy(out, "No answer from FujiNet. Check the selected link and bridge.");
+    else if (err == heErrLink) {
+        if (gPrefs.link == LINK_LEGACY && !HasNewSerialManager())
+            StrCopy(out, "Legacy cradle needs Palm OS 3.3 or later. Choose another link.");
+        else
+            StrPrintF(out, "Could not open the selected link (error %x).", gLinkError);
+    }
     else if (err == fnErrRefused)
         StrCopy(out, "FujiNet refused the request.");
     else if (err == fnErrTooBig)
@@ -123,9 +151,46 @@ static void ShowError(const char *what, Err err, UInt8 ndevErr)
 
 /* ---- HTTP through N1: ------------------------------------------------ */
 
+/* Only one Palm serial API may own the port at a time. */
+static void CloseLink(void)
+{
+    if (gOpenLink == LINK_LEGACY)
+        FnClose();
+    else if (gOpenLink >= 0)
+        fuji_palmos_close();
+    gOpenLink = -1;
+}
+
+static Err OpenLink(void)
+{
+    Err err;
+
+    if (gOpenLink == gPrefs.link)
+        return errNone;
+    CloseLink();
+    if (gPrefs.link == LINK_LEGACY) {
+        if (!HasNewSerialManager()) {
+            gLinkError = 0;
+            return heErrLink;
+        }
+        err = FnOpen();
+        if (err != errNone) {
+            gLinkError = err;
+            return heErrLink;
+        }
+    } else {
+        if (!fuji_palmos_open(kLinkNames[gPrefs.link], 115200uL)) {
+            gLinkError = fuji_palmos_last_error();
+            return heErrLink;
+        }
+    }
+    gOpenLink = gPrefs.link;
+    return errNone;
+}
+
 /* One GET of gUrl into gReply. *ndevErr is FujiNet's status code when the
  * request ended badly (an HTTP error, or no network). */
-static Err HttpGet(UInt16 *len, UInt8 *ndevErr)
+static Err LegacyHttpGet(UInt16 *len, UInt8 *ndevErr)
 {
     FnNetStatus status;
     UInt32 last;
@@ -169,6 +234,68 @@ static Err HttpGet(UInt16 *len, UInt8 *ndevErr)
     }
     FnNetClose(NET_UNIT);
     return err;
+}
+
+static Err LibraryHttpGet(UInt16 *len, UInt8 *ndevErr)
+{
+    UInt16 avail, want;
+    UInt8 connected, netError;
+    UInt32 last;
+    Int16 got;
+    Err err = errNone;
+
+    *len = 0;
+    *ndevErr = 0;
+    if (network_open(gUrl, OPEN_MODE_HTTP_GET, OPEN_TRANS_NONE) != FN_ERR_OK)
+        return fnErrNoReply;
+    last = TimGetTicks();
+    for (;;) {
+        EvtResetAutoOffTimer();
+        if (network_status(gUrl, &avail, &connected, &netError) != FN_ERR_OK) {
+            err = fnErrNoReply;
+            break;
+        }
+        if (avail) {
+            want = sizeof(gReply) - *len;
+            if (want == 0) {
+                err = heErrTooLong;
+                break;
+            }
+            if (want > avail)
+                want = avail;
+            if (want > FN_NET_CHUNK)
+                want = FN_NET_CHUNK;
+            got = network_read(gUrl, gReply + *len, want);
+            if (got <= 0) {
+                err = fnErrNoReply;
+                break;
+            }
+            *len += (UInt16)got;
+            last = TimGetTicks();
+        } else if (!connected) {
+            if (netError != FN_NET_OK && netError != FN_NET_EOF)
+                *ndevErr = netError;
+            break;
+        } else if (TimGetTicks() - last > STALL_TICKS) {
+            err = heErrTimeout;
+            break;
+        } else {
+            SysTaskDelay(READ_POLL_TICKS);
+        }
+    }
+    network_close(gUrl);
+    return err;
+}
+
+static Err HttpGet(UInt16 *len, UInt8 *ndevErr)
+{
+    Err err = OpenLink();
+
+    if (err != errNone)
+        return err;
+    if (gPrefs.link == LINK_LEGACY)
+        return LegacyHttpGet(len, ndevErr);
+    return LibraryHttpGet(len, ndevErr);
 }
 
 /* A GET of a game call (state, move/XX, leave) into gGame. A READ is sent
@@ -1034,6 +1161,12 @@ static void ReadSetup(FormType *form)
     PrefSetAppPreferences(CREATOR, PREFS_ID, PREFS_VERSION, &gPrefs, sizeof(gPrefs), true);
 }
 
+static void ShowLink(FormType *form)
+{
+    LstSetSelection(GetObject(form, SetupLinkList), gPrefs.link);
+    CtlSetLabel(GetObject(form, SetupLinkTrigger), (char *)kLinkNames[gPrefs.link]);
+}
+
 static void DrawTableRow(Int16 item, RectangleType *bounds, Char **unused)
 {
     const HsTable *t;
@@ -1119,6 +1252,7 @@ static Boolean SetupHandleEvent(EventType *event)
         SetFieldText(form, SetupNameField, gPrefs.name);
         SetFieldText(form, SetupServerField, gPrefs.server);
         SetFieldText(form, SetupTableField, gPrefs.table);
+        ShowLink(form);
         FldSetTextPtr(GetObject(form, SetupStatusField), gStatus);
         ShowTables(form);
         FrmDrawForm(form);
@@ -1138,6 +1272,18 @@ static Boolean SetupHandleEvent(EventType *event)
     case fetchEvent:
         RefreshTables(form);
         return true;
+    case popSelectEvent:
+        if (event->data.popSelect.controlID == SetupLinkTrigger) {
+            Int16 selected = event->data.popSelect.selection;
+            if (selected >= 0 && selected < LINK_COUNT && selected != gPrefs.link) {
+                CloseLink();
+                gPrefs.link = (UInt8)selected;
+                ReadSetup(form);
+                RefreshTables(form);
+            }
+            return false; /* Palm updates the popup trigger's label. */
+        }
+        break;
     case lstSelectEvent:
         if (event->data.lstSelect.listID == SetupList) {
             Int16 i = event->data.lstSelect.selection;
@@ -1239,16 +1385,23 @@ static Boolean HasNewSerialManager(void)
 static void LoadPrefs(void)
 {
     UInt16 size = sizeof(gPrefs);
+    Int16 version;
 
-    if (PrefGetAppPreferences(CREATOR, PREFS_ID, &gPrefs, &size, true) != PREFS_VERSION ||
-        size != sizeof(gPrefs)) {
+    MemSet(&gPrefs, sizeof(gPrefs), 0);
+    version = PrefGetAppPreferences(CREATOR, PREFS_ID, &gPrefs, &size, true);
+    if (version == 1 && size == sizeof(HePrefsV1)) {
+        gPrefs.link = LINK_LEGACY;
+    } else if (version != PREFS_VERSION || size != sizeof(gPrefs)) {
         MemSet(&gPrefs, sizeof(gPrefs), 0);
         StrCopy(gPrefs.server, DEFAULT_SERVER);
         StrCopy(gPrefs.table, DEFAULT_TABLE);
+        gPrefs.link = LINK_LEGACY;
     }
     gPrefs.name[HS_NAME_LEN - 1] = '\0';
     gPrefs.table[HS_TABLE_ID_LEN - 1] = '\0';
     gPrefs.server[SERVER_LEN - 1] = '\0';
+    if (gPrefs.link >= LINK_COUNT)
+        gPrefs.link = LINK_LEGACY;
 }
 
 static Err AppStart(void)
@@ -1258,14 +1411,14 @@ static Err AppStart(void)
     LoadPrefs();
     gStatus[0] = '\0';
     gOffscreen = WinCreateOffscreenWindow(160, 160, screenFormat, &err);
-    return FnOpen();
+    return err;
 }
 
 static void AppStop(void)
 {
     FrmCloseAllForms(); /* the table form's close gives up the seat */
     LeaveTable();
-    FnClose();
+    CloseLink();
     if (gOffscreen)
         WinDeleteWindow(gOffscreen, false);
     gOffscreen = NULL;
@@ -1277,13 +1430,9 @@ UInt32 PilotMain(UInt16 cmd, MemPtr cmdPBP, UInt16 launchFlags)
 
     if (cmd != sysAppLaunchCmdNormalLaunch)
         return 0;
-    if (!HasNewSerialManager()) {
-        FrmAlert(RomIncompatibleAlert);
-        return 0;
-    }
     err = AppStart();
     if (err != errNone) {
-        ShowError("Could not open the cradle port.", err, 0);
+        ShowError("Could not start the game.", err, 0);
         AppStop();
         return 0;
     }
