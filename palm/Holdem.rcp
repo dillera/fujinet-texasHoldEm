@@ -17,9 +17,13 @@ BEGIN
     FIELD ID SetupNameField AT (38 17 50 12) UNDERLINED SINGLELINE MAXCHARS 8
     LABEL "Server:" AUTOID AT (2 31)
     FIELD ID SetupServerField AT (38 31 120 12) UNDERLINED SINGLELINE MAXCHARS 63
-    LABEL "Tables" AUTOID AT (2 46) FONT 1
-    BUTTON "Refresh" ID SetupRefreshButton AT (118 45 40 12) FONT 0
-    LIST "" ID SetupList AT (2 59 156 66) VISIBLEITEMS 6
+    LABEL "Link:" AUTOID AT (2 46) FONT 0
+    POPUPTRIGGER "Legacy cradle" ID SetupLinkTrigger AT (34 44 104 12) LEFTANCHOR FONT 0
+    POPUPLIST ID SetupLinkTrigger SetupLinkList
+    LIST "Legacy cradle" "USB Library" "BuiltIn SerLib" "Serial Library" ID SetupLinkList AT (34 44 112 48) NONUSABLE FONT 0
+    LABEL "Tables" AUTOID AT (2 62) FONT 1
+    BUTTON "Refresh" ID SetupRefreshButton AT (118 61 40 12) FONT 0
+    LIST "" ID SetupList AT (2 75 156 50) VISIBLEITEMS 4
     LABEL "Table:" AUTOID AT (2 130)
     FIELD ID SetupTableField AT (38 130 50 12) UNDERLINED SINGLELINE MAXCHARS 8
     BUTTON "Sit Down" ID SetupSitButton AT (1 147 AUTO AUTO)
@@ -54,14 +58,6 @@ BEGIN
         MENUITEM SEPARATOR
         MENUITEM "About" ID TableMenuAbout
     END
-END
-
-ALERT ID RomIncompatibleAlert
-ERROR
-BEGIN
-    TITLE "FN Texas Hold'em"
-    MESSAGE "This app needs Palm OS 3.3 or later."
-    BUTTONS "OK"
 END
 
 ALERT ID MessageAlert
