@@ -9,7 +9,9 @@
  * server offers; every poker rule is the server's. See common/holdem.h.
  *
  * The cards are the Apple II client's hi-res art, the small cards the Atari
- * Lynx client's sprites, both converted by tools/make_cards.py.
+ * Lynx client's sprites, both converted by tools/make_cards.py. Runs on Palm
+ * OS 3.1 and later; on 3.5 or later with a colour screen it draws them in
+ * colour (see StartColor), elsewhere in black and white.
  */
 #include "fujinet-network.h"
 #include "fujinet-palmos.h"
@@ -104,13 +106,37 @@ static UInt16 gFailures;
 static Int16 gCursor;           /* highlighted move, for the hard keys */
 static char gNotice[48];        /* trouble shown on the status line */
 
-/* A bitmap built in memory for the card art. */
+/* A bitmap built in memory for the card art: 1-bit rows, or on a colour
+ * screen one byte a pixel. A version 1 header works on every Palm OS 3.x. */
 typedef struct {
     BitmapType hdr;
-    UInt16 bits[CARD_H];
+    UInt8 bits[16 * CARD_H];
 } PicBitmap;
 static PicBitmap gPic;
 static Boolean HasNewSerialManager(void);
+
+/* Colour: Palm OS 3.5 or later with a colour screen, set to 8 bits. Every
+ * colour call is behind gColor; older and greyscale Palms draw in black
+ * and white as before. */
+#define MIN_ROM sysMakeROMVersion(3, 1, 0, sysROMStageRelease, 0)
+#define COLOR_ROM sysMakeROMVersion(3, 5, 0, sysROMStageRelease, 0)
+static Boolean gColor;
+static Boolean gModeSet;        /* the screen mode needs putting back */
+static IndexedColorType gPal[CP_COUNT];
+static UInt8 gPx[CARD_H * 16];  /* a card's colour classes (see cards.h) */
+
+/* RGB for each CP_ class: card paper, felt, ink, red, back, chip, the empty
+ * slot's dots, and the highlight behind the player to move. */
+static const RGBColorType kColors[CP_COUNT] = {
+    { 0, 0xFF, 0xFF, 0xFF },
+    { 0, 0x00, 0x66, 0x33 },
+    { 0, 0x00, 0x00, 0x00 },
+    { 0, 0xCC, 0x00, 0x00 },
+    { 0, 0x00, 0x33, 0x99 },
+    { 0, 0xFF, 0x99, 0x00 },
+    { 0, 0x66, 0x99, 0x66 },
+    { 0, 0x00, 0x33, 0x99 },
+};
 
 /* ---- Errors ---------------------------------------------------------- */
 
@@ -161,6 +187,31 @@ static void CloseLink(void)
     gOpenLink = -1;
 }
 
+#ifdef HOLDEM_DEMO
+#include "demo_data.h"
+
+/* No FujiNet: the table list, or the saved state the table name picks. */
+static Err HttpGet(UInt16 *len, UInt8 *ndevErr)
+{
+    const UInt8 *reply = demoFlop;
+    UInt16 size = sizeof(demoFlop);
+
+    *ndevErr = 0;
+    if (StrStr(gUrl, "tables")) {
+        reply = demoTables;
+        size = sizeof(demoTables);
+    } else if (StrCaselessCompare(gPrefs.table, "turn") == 0) {
+        reply = demoTurn;
+        size = sizeof(demoTurn);
+    } else if (StrCaselessCompare(gPrefs.table, "show") == 0) {
+        reply = demoShowdown;
+        size = sizeof(demoShowdown);
+    }
+    MemMove(gReply, reply, size);
+    *len = size;
+    return errNone;
+}
+#else
 static Err OpenLink(void)
 {
     Err err;
@@ -297,6 +348,7 @@ static Err HttpGet(UInt16 *len, UInt8 *ndevErr)
         return LegacyHttpGet(len, ndevErr);
     return LibraryHttpGet(len, ndevErr);
 }
+#endif /* HOLDEM_DEMO */
 
 /* A GET of a game call (state, move/XX, leave) into gGame. A READ is sent
  * once (see fnnet.h), so a lost one spoils the whole reply; that is tried
@@ -358,6 +410,36 @@ static void DrawPic(const UInt16 *rows, Int16 width, Int16 height, Coord x, Coor
     WinDrawBitmap(&gPic.hdr, x, y);
 }
 
+/* The colour version: px holds a CP_ class a pixel, width to a row. */
+static void DrawPx(const UInt8 *px, Int16 width, Int16 height, Coord x, Coord y)
+{
+    Int16 rowBytes = (width + 1) & ~1, i, j;
+    UInt8 *out = gPic.bits;
+
+    MemSet(&gPic.hdr, sizeof(gPic.hdr), 0);
+    gPic.hdr.width = width;
+    gPic.hdr.height = height;
+    gPic.hdr.rowBytes = rowBytes;
+    gPic.hdr.pixelSize = 8;
+    gPic.hdr.version = 1;
+    for (j = 0; j < height; j++, out += rowBytes, px += width)
+        for (i = 0; i < width; i++)
+            out[i] = gPal[px[i]];
+    WinDrawBitmap(&gPic.hdr, x, y);
+}
+
+/* 1-bit rows (high bit leftmost) as colour: set bits on, the rest off. */
+static void DrawRowsPx(const UInt16 *rows, Int16 width, Int16 height, UInt8 on, UInt8 off,
+                       Coord x, Coord y)
+{
+    Int16 i, j;
+
+    for (j = 0; j < height; j++)
+        for (i = 0; i < width; i++)
+            gPx[j * width + i] = (rows[j] & (0x8000 >> i)) ? on : off;
+    DrawPx(gPx, width, height, x, y);
+}
+
 static void DrawTableCard(const char *code, Coord x, Coord y)
 {
     UInt16 rows[CARD_H];
@@ -365,6 +447,11 @@ static void DrawTableCard(const char *code, Coord x, Coord y)
 
     if (!hs_card(code, &rank, &suit))
         rank = suit = HS_UNKNOWN;
+    if (gColor) {
+        card_table_px(rank, suit, (fn_u8 (*)[16])gPx);
+        DrawPx(gPx, 16, CARD_H, x, y);
+        return;
+    }
     card_table(rank, suit, rows);
     DrawPic(rows, 16, CARD_H, x, y);
 }
@@ -383,7 +470,10 @@ static void DrawEmptySlot(Coord x, Coord y)
     }
     for (i = 3; i < CARD_H - 2; i += 2)
         rows[i] &= ~((0x8000 >> 1) | (0x8000 >> (CARD_W - 2)));
-    DrawPic(rows, 16, CARD_H, x, y);
+    if (gColor)
+        DrawRowsPx(rows, 16, CARD_H, CP_FELT, CP_SLOT, x, y);
+    else
+        DrawPic(rows, 16, CARD_H, x, y);
 }
 
 static void DrawMiniCard(const char *code, Coord x, Coord y)
@@ -393,6 +483,11 @@ static void DrawMiniCard(const char *code, Coord x, Coord y)
 
     if (!hs_card(code, &rank, &suit))
         rank = suit = HS_UNKNOWN;
+    if (gColor) {
+        card_mini_px(rank, suit, (fn_u8 (*)[MINI_W])gPx);
+        DrawPx(gPx, MINI_W, MINI_H, x, y);
+        return;
+    }
     card_mini(rank, suit, rows);
     DrawPic(rows, MINI_W, MINI_H, x, y);
 }
@@ -401,6 +496,11 @@ static void DrawMiniHalf(Coord x, Coord y)
 {
     UInt16 rows[MINI_H];
 
+    if (gColor) {
+        card_mini_half_px((fn_u8 (*)[MINI_HALF_W])gPx);
+        DrawPx(gPx, MINI_HALF_W, MINI_H, x, y);
+        return;
+    }
     card_mini_half(rows);
     DrawPic(rows, MINI_HALF_W, MINI_H, x, y);
 }
@@ -411,14 +511,48 @@ static void DrawChip(Coord x, Coord y, Boolean onFelt)
     UInt16 i;
 
     card_chip(rows);
+    if (gColor) {
+        DrawRowsPx(rows, 7, 8, CP_CHIP, onFelt ? CP_FELT : CP_PAPER, x, y);
+        return;
+    }
     if (onFelt)
         for (i = 0; i < 8; i++)
             rows[i] = ~rows[i];
     DrawPic(rows, 7, 8, x, y);
 }
 
+/* A rectangle filled with a CP_ colour; black on a black and white Palm. */
+static void FillRect(const RectangleType *r, UInt16 corner, UInt8 ground)
+{
+    if (!gColor) {
+        WinDrawRectangle(r, corner);
+        return;
+    }
+    WinPushDrawState();
+    WinSetForeColor(gPal[ground]);
+    WinDrawRectangle(r, corner);
+    WinPopDrawState();
+}
+
+/* Text on a ground: CP_PAPER is plain; any other is white text on that
+ * colour, or inverted text on a black and white Palm. */
+static void DrawOn(const char *text, Int16 len, Coord x, Coord y, UInt8 ground)
+{
+    if (ground == CP_PAPER) {
+        WinDrawChars(text, len, x, y);
+    } else if (gColor) {
+        WinPushDrawState();
+        WinSetTextColor(gPal[CP_PAPER]);
+        WinSetBackColor(gPal[ground]);
+        WinDrawChars(text, len, x, y);
+        WinPopDrawState();
+    } else {
+        WinDrawInvertedChars(text, len, x, y);
+    }
+}
+
 /* Draws text cut to fit width, ending in "..." when it was cut. */
-static void DrawFit(const char *text, Coord x, Coord y, Int16 width, Boolean inverted)
+static void DrawFit(const char *text, Coord x, Coord y, Int16 width, UInt8 ground)
 {
     Int16 w = width, len = StrLen(text);
     Boolean fits;
@@ -436,10 +570,7 @@ static void DrawFit(const char *text, Coord x, Coord y, Int16 width, Boolean inv
         text = buf;
         len += 3;
     }
-    if (inverted)
-        WinDrawInvertedChars(text, len, x, y);
-    else
-        WinDrawChars(text, len, x, y);
+    DrawOn(text, len, x, y, ground);
 }
 
 static void DrawRight(const char *text, Coord right, Coord y, Boolean inverted)
@@ -513,7 +644,7 @@ static void DrawSeat(const HsPlayer *p, Boolean active, Coord x, Coord y)
     else
         text[0] = '\0';
     if (text[0])
-        DrawFit(text, x + w + 5, y + 9, textW - w - 6, false);
+        DrawFit(text, x + w + 5, y + 9, textW - w - 6, CP_PAPER);
 
     TitleCase(p->name, text, sizeof(text));
     if (active) {
@@ -522,11 +653,11 @@ static void DrawSeat(const HsPlayer *p, Boolean active, Coord x, Coord y)
         r.topLeft.y = y;
         r.extent.x = textW;
         r.extent.y = 10;
-        WinDrawRectangle(&r, 2);
-        DrawFit(text, x + 2, y - 1, textW - 3, true);
+        FillRect(&r, 2, CP_HILITE);
+        DrawFit(text, x + 2, y - 1, textW - 3, CP_HILITE);
         FntSetFont(stdFont);
     } else {
-        DrawFit(text, x + 2, y - 1, textW - 3, false);
+        DrawFit(text, x + 2, y - 1, textW - 3, CP_PAPER);
     }
 }
 
@@ -562,7 +693,7 @@ static void DrawFelt(void)
     r.topLeft.y = FELT_Y;
     r.extent.x = 160;
     r.extent.y = FELT_H;
-    WinDrawRectangle(&r, 5);
+    FillRect(&r, 5, CP_FELT);
 
     for (i = 0; i < 5; i++) {
         if (i < n)
@@ -579,12 +710,12 @@ static void DrawFelt(void)
     }
 
     FntSetFont(stdFont);
-    DrawFit(hs_street(gGame.round), PANEL_X + 1, FELT_Y + 1, 158 - PANEL_X, true);
+    DrawFit(hs_street(gGame.round), PANEL_X + 1, FELT_Y + 1, 158 - PANEL_X, CP_FELT);
     DrawChip(PANEL_X + 1, FELT_Y + 13, true);
-    WinDrawInvertedChars("Pot", 3, PANEL_X + 10, FELT_Y + 11);
+    DrawOn("Pot", 3, PANEL_X + 10, FELT_Y + 11, CP_FELT);
     FntSetFont(boldFont);
     StrPrintF(text, "%u", gGame.pot);
-    WinDrawInvertedChars(text, StrLen(text), PANEL_X + 1, FELT_Y + 20);
+    DrawOn(text, StrLen(text), PANEL_X + 1, FELT_Y + 20, CP_FELT);
     FntSetFont(stdFont);
 }
 
@@ -655,7 +786,7 @@ static void DrawStatus(void)
 
     StatusText(text);
     FntSetFont(gMyTurn && !gNotice[0] ? boldFont : stdFont);
-    DrawFit(text, 2, STATUS_Y, 156, false);
+    DrawFit(text, 2, STATUS_Y, 156, CP_PAPER);
     FntSetFont(stdFont);
 }
 
@@ -750,7 +881,7 @@ static void DrawTable(void)
         FntSetFont(boldFont);
         WinDrawChars("FN Texas Hold'em", 16, 34, 40);
         FntSetFont(stdFont);
-        DrawFit(gNotice[0] ? gNotice : "Taking a seat...", 4, 60, 152, false);
+        DrawFit(gNotice[0] ? gNotice : "Taking a seat...", 4, 60, 152, CP_PAPER);
         DrawFelt();
     } else {
         DrawSeats();
@@ -764,7 +895,7 @@ static void DrawTable(void)
             char text[24];
             FntSetFont(stdFont);
             StrPrintF(text, "Table: %s", gPrefs.table);
-            DrawFit(text, 2, BAR_Y + 6, 118, false);
+            DrawFit(text, 2, BAR_Y + 6, 118, CP_PAPER);
             DrawLeave();
         }
     }
@@ -1179,7 +1310,7 @@ static void DrawTableRow(Int16 item, RectangleType *bounds, Char **unused)
     t = &gTables.tables[item];
     TitleCase(t->name, name, sizeof(name));
     w = FntCharsWidth(t->seats, StrLen(t->seats));
-    DrawFit(name, x, y, right - w - 6 - x, false);
+    DrawFit(name, x, y, right - w - 6 - x, CP_PAPER);
     WinDrawChars(t->seats, StrLen(t->seats), right - w, y);
 }
 
@@ -1382,6 +1513,13 @@ static Boolean HasNewSerialManager(void)
     return FtrGet(sysFileCSerialMgr, sysFtrNewSerialPresent, &value) == errNone && value != 0;
 }
 
+/* Legacy cradle needs the 3.3 Serial Manager; older Palms start on the
+ * old Serial Manager's library instead. */
+static UInt8 DefaultLink(void)
+{
+    return HasNewSerialManager() ? LINK_LEGACY : LINK_SERIAL;
+}
+
 static void LoadPrefs(void)
 {
     UInt16 size = sizeof(gPrefs);
@@ -1390,18 +1528,65 @@ static void LoadPrefs(void)
     MemSet(&gPrefs, sizeof(gPrefs), 0);
     version = PrefGetAppPreferences(CREATOR, PREFS_ID, &gPrefs, &size, true);
     if (version == 1 && size == sizeof(HePrefsV1)) {
-        gPrefs.link = LINK_LEGACY;
+        gPrefs.link = DefaultLink();
     } else if (version != PREFS_VERSION || size != sizeof(gPrefs)) {
         MemSet(&gPrefs, sizeof(gPrefs), 0);
         StrCopy(gPrefs.server, DEFAULT_SERVER);
         StrCopy(gPrefs.table, DEFAULT_TABLE);
-        gPrefs.link = LINK_LEGACY;
+        gPrefs.link = DefaultLink();
     }
     gPrefs.name[HS_NAME_LEN - 1] = '\0';
     gPrefs.table[HS_TABLE_ID_LEN - 1] = '\0';
     gPrefs.server[SERVER_LEN - 1] = '\0';
     if (gPrefs.link >= LINK_COUNT)
-        gPrefs.link = LINK_LEGACY;
+        gPrefs.link = DefaultLink();
+}
+
+static UInt32 RomVersion(void)
+{
+    UInt32 rom = 0;
+
+    FtrGet(sysFtrCreator, sysFtrNumROMVersion, &rom);
+    return rom;
+}
+
+/* Turns colour on where there is a colour screen: Palm OS 3.5 or later (the
+ * colour calls are 3.5's), at 8 bits or more. Greyscale and black and white
+ * Palms keep the 1-bit drawing. */
+static void StartColor(void)
+{
+    UInt32 depth;
+    Boolean color = false;
+    UInt16 i;
+
+    if (RomVersion() < COLOR_ROM)
+        return;
+    if (WinScreenMode(winScreenModeGetSupportsColor, NULL, NULL, NULL, &color) != errNone ||
+        !color)
+        return;
+    WinScreenMode(winScreenModeGet, NULL, NULL, &depth, NULL);
+    if (depth < 8) {
+        depth = 8;
+        color = true;
+        if (WinScreenMode(winScreenModeSet, NULL, NULL, &depth, &color) != errNone)
+            return;
+        gModeSet = true;
+        /* Trust what the screen took, not what was asked for. */
+        WinScreenMode(winScreenModeGet, NULL, NULL, &depth, NULL);
+        if (depth < 8)
+            return;
+    }
+    for (i = 0; i < CP_COUNT; i++)
+        gPal[i] = WinRGBToIndex(&kColors[i]);
+    gColor = true;
+}
+
+static void StopColor(void)
+{
+    if (gModeSet)
+        WinScreenMode(winScreenModeSetToDefaults, NULL, NULL, NULL, NULL);
+    gModeSet = false;
+    gColor = false;
 }
 
 static Err AppStart(void)
@@ -1410,6 +1595,7 @@ static Err AppStart(void)
 
     LoadPrefs();
     gStatus[0] = '\0';
+    StartColor(); /* first: the offscreen window takes the screen's depth */
     gOffscreen = WinCreateOffscreenWindow(160, 160, screenFormat, &err);
     return err;
 }
@@ -1422,6 +1608,7 @@ static void AppStop(void)
     if (gOffscreen)
         WinDeleteWindow(gOffscreen, false);
     gOffscreen = NULL;
+    StopColor();
 }
 
 UInt32 PilotMain(UInt16 cmd, MemPtr cmdPBP, UInt16 launchFlags)
@@ -1430,6 +1617,10 @@ UInt32 PilotMain(UInt16 cmd, MemPtr cmdPBP, UInt16 launchFlags)
 
     if (cmd != sysAppLaunchCmdNormalLaunch)
         return 0;
+    if (RomVersion() < MIN_ROM) {
+        FrmAlert(RomIncompatibleAlert);
+        return sysErrRomIncompatible;
+    }
     err = AppStart();
     if (err != errNone) {
         ShowError("Could not start the game.", err, 0);

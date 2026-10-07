@@ -60,6 +60,14 @@ BEGIN
     END
 END
 
+ALERT ID RomIncompatibleAlert
+ERROR
+BEGIN
+    TITLE "System Incompatible"
+    MESSAGE "FN Texas Hold'em needs Palm OS 3.1 or later."
+    BUTTONS "OK"
+END
+
 ALERT ID MessageAlert
 ERROR
 BEGIN
