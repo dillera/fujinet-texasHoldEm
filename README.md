@@ -24,7 +24,7 @@ client-side poker rules.
 | ColecoVision | ✅ playable (MAME) | `make FUJINET_LIB=<fujinet-lib-experimental dir> PLATFORMS=coleco coleco` | `r2r/coleco/texas.rom` (32K FujiNet cart) |
 | NES | ✅ playable (MAME) | `make FUJINET_LIB=<fujinet-lib-experimental dir> PLATFORMS=nes nes` | `r2r/nes/texas.nes` (NROM FujiNet cart) |
 | Bally Astrocade | ✅ playable | `cd astrocade && ./build.sh` | `astrocade/build/texas.bin` (8K FujiNet cart image) |
-| Palm OS | 🔨 builds | `cd palm && make` (palmdev Docker image) | `palm/build/Holdem.prc` |
+| Palm OS 3.1+ | 🔨 builds, emulator-tested | `cd palm && make` (palmdev Docker image + fujinet-lib palmos) | `palm/build/Holdem.prc` (one PRC for OS 3.1–4.x; colour on colour Palms) |
 | C64 | ⬜ not yet converted | — | — |
 
 ## What changed from 5 Card Stud
@@ -135,17 +135,31 @@ five moves. See `astrocade/README.md` for the full list.
 
 ## Palm OS client (C, prc-tools)
 
-`palm/` — standalone Palm OS 3.5+ client, "FN Texas Hold'em" (creator
-`ADTH`), brought over from [fujinet-palm](https://github.com/dillera/fujinet-palm).
+`palm/` — standalone Palm OS client, "FN Texas Hold'em" (creator `ADTH`),
+brought over from [fujinet-palm](https://github.com/dillera/fujinet-palm).
 Talks to FujiNet over the FujiBus serial link and parses the `bin=1` state.
 `palm/common/` is a copy of fujinet-palm's shared FujiBus/network library.
-The m68k toolchain runs in Docker:
+
+One PRC runs on Palm OS 3.1, 3.3, 3.5 and later. On OS 3.5+ with a colour
+screen it switches to 8-bit colour (green felt, red hearts and diamonds,
+blue backs, gold chips); black and white and greyscale Palms get the 1-bit
+cards. The "Legacy cradle" link needs OS 3.3's Serial Manager, so older
+Palms default to "Serial Library".
+
+The non-legacy links come from fujinet-lib's Palm OS platform, the `palmos`
+branch of [nwah/fujinet-lib-experimental](https://github.com/nwah/fujinet-lib-experimental/tree/palmos),
+expected beside this repo (override with `FNLIB=/path`). The m68k toolchain
+runs in Docker:
 
 ```bash
+git clone -b palmos https://github.com/nwah/fujinet-lib-experimental.git \
+    ../fujinet-palm-dev/fujinet-lib-palmos   # once
 cd palm
 make image      # once: builds the palmdev toolchain image
 make            # build/Holdem.prc
-make test       # desktop test of the wire reader against saved server replies
+make demo       # build/demo/Holdem.prc, "FN Hold'em Demo": no network, plays
+                #   the saved replies (table "turn" or "show" for those states)
+make test       # desktop test of the wire reader and card art
 make cards      # regenerate cardart.h from this repo's Apple II + Lynx art
 ```
 

@@ -25,4 +25,21 @@ void card_chip(fn_u16 rows[8]);
 /* A 5 x 6 suit, in the high bits. */
 void card_suit(fn_u8 suit, fn_u16 rows[6]);
 
+/* For colour screens: the same pictures as one byte a pixel, each saying
+ * what the pixel is; the app maps these to palette colours. Red suits (d, h)
+ * get CP_RED ink, backs CP_BACK. */
+#define CP_PAPER  0     /* card face, and the screen's own white */
+#define CP_FELT   1
+#define CP_INK    2     /* black ink and card outlines */
+#define CP_RED    3
+#define CP_BACK   4     /* the pattern on a card's back */
+#define CP_CHIP   5
+#define CP_SLOT   6     /* the dots outlining an empty place on the board */
+#define CP_HILITE 7     /* behind the name of the player to move */
+#define CP_COUNT  8
+
+void card_table_px(fn_u8 rank, fn_u8 suit, fn_u8 px[CARD_H][16]);
+void card_mini_px(fn_u8 rank, fn_u8 suit, fn_u8 px[MINI_H][MINI_W]);
+void card_mini_half_px(fn_u8 px[MINI_H][MINI_HALF_W]);
+
 #endif /* CARDS_H */

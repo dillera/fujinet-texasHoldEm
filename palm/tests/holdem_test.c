@@ -168,7 +168,7 @@ static void TestNamesAndMoves(void)
 static void TestCards(void)
 {
     fn_u8 rank, suit;
-    fn_u16 rows[CARD_H], mini[MINI_H], i;
+    fn_u16 rows[CARD_H], back[CARD_H], mini[MINI_H], i;
 
     CHECK(hs_card("ah", &rank, &suit) && rank == 12 && suit == 2);
     CHECK(hs_card("2c", &rank, &suit) && rank == 0 && suit == 0);
@@ -183,8 +183,8 @@ static void TestCards(void)
     for (i = 0; i < CARD_H; i++)
         CHECK((rows[i] & 3) == 3);
     /* The back differs from any face. */
-    card_table(HS_UNKNOWN, HS_UNKNOWN, mini);
-    CHECK(memcmp(rows, mini, sizeof(fn_u16) * 8) != 0);
+    card_table(HS_UNKNOWN, HS_UNKNOWN, back);
+    CHECK(memcmp(rows, back, sizeof(fn_u16) * 8) != 0);
 
     /* Mini cards stay within 10 px. */
     card_mini(12, 3, mini);
@@ -193,6 +193,65 @@ static void TestCards(void)
     card_mini(HS_UNKNOWN, HS_UNKNOWN, mini);
     for (i = 0; i < MINI_H; i++)
         CHECK((mini[i] & 0x003F) == 0);
+}
+
+/* How many pixels of each class a colour picture has; and whether it is
+ * the 1-bit picture coloured in: paper exactly where no bit is set. */
+static int CountPx(const fn_u8 *px, int w, int h, const fn_u16 *rows, int counts[CP_COUNT])
+{
+    int x, y, same = 1;
+    fn_u8 c;
+
+    memset(counts, 0, sizeof(int) * CP_COUNT);
+    for (y = 0; y < h; y++)
+        for (x = 0; x < w; x++) {
+            c = px[y * w + x];
+            if (c >= CP_COUNT)
+                return 0;
+            counts[c]++;
+            if ((c != CP_PAPER) != ((rows[y] & (0x8000 >> x)) != 0))
+                same = 0;
+        }
+    return same;
+}
+
+static void TestColorCards(void)
+{
+    fn_u8 table[CARD_H][16], mini[MINI_H][MINI_W], half[MINI_H][MINI_HALF_W];
+    fn_u16 rows[CARD_H];
+    int n[CP_COUNT], y;
+
+    /* Hearts red, spades black, the back its own colour; felt round each. */
+    card_table_px(12, 2, table);
+    card_table(12, 2, rows);
+    CHECK(CountPx(&table[0][0], 16, CARD_H, rows, n));
+    CHECK(n[CP_RED] > 0 && n[CP_INK] == 0 && n[CP_BACK] == 0 && n[CP_FELT] > 0);
+    for (y = 0; y < CARD_H; y++)
+        CHECK(table[y][0] == CP_FELT && table[y][14] == CP_FELT && table[y][15] == CP_FELT);
+    CHECK(table[0][1] == CP_FELT && table[0][2] == CP_PAPER);
+    card_table_px(1, 1, table);
+    card_table(1, 1, rows);
+    CHECK(CountPx(&table[0][0], 16, CARD_H, rows, n) && n[CP_RED] > 0 && n[CP_INK] == 0);
+    card_table_px(12, 3, table);
+    card_table(12, 3, rows);
+    CHECK(CountPx(&table[0][0], 16, CARD_H, rows, n) && n[CP_INK] > 0 && n[CP_RED] == 0);
+    card_table_px(HS_UNKNOWN, HS_UNKNOWN, table);
+    card_table(HS_UNKNOWN, HS_UNKNOWN, rows);
+    CHECK(CountPx(&table[0][0], 16, CARD_H, rows, n) && n[CP_BACK] > 0 && n[CP_RED] == 0);
+
+    /* Mini cards: a black outline whatever the suit. */
+    card_mini_px(12, 1, mini);
+    card_mini(12, 1, rows);
+    CHECK(CountPx(&mini[0][0], MINI_W, MINI_H, rows, n) && n[CP_RED] > 0 && n[CP_INK] > 0);
+    card_mini_px(12, 0, mini);
+    card_mini(12, 0, rows);
+    CHECK(CountPx(&mini[0][0], MINI_W, MINI_H, rows, n) && n[CP_RED] == 0);
+    card_mini_px(HS_UNKNOWN, HS_UNKNOWN, mini);
+    card_mini(HS_UNKNOWN, HS_UNKNOWN, rows);
+    CHECK(CountPx(&mini[0][0], MINI_W, MINI_H, rows, n) && n[CP_BACK] > 0 && n[CP_INK] > 0);
+    card_mini_half_px(half);
+    card_mini_half(rows);
+    CHECK(CountPx(&half[0][0], MINI_HALF_W, MINI_H, rows, n) && n[CP_BACK] > 0);
 }
 
 int main(void)
@@ -204,6 +263,7 @@ int main(void)
     TestSplitServer();
     TestNamesAndMoves();
     TestCards();
+    TestColorCards();
     if (failures) {
         printf("holdem_test: %d failure(s)\n", failures);
         return 1;
